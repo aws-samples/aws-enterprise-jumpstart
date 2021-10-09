@@ -1,0 +1,6 @@
+{
+  "Parameters": {
+    "LogArchiveAccountEmail": "logs@mycompany.com",
+    "AuditAccountEmail": "audit@mycompany.com"
+  }
+}

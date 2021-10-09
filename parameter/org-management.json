@@ -1,0 +1,9 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ent-jumpstart",
+    "CoreOrganizationalUnit": "Core",
+    "FoundationOrganizationalUnit": "Foundation",
+    "OrganizationId": "o-1234566",
+    "DeploymentAccountId": "9999999999"
+  }
+}

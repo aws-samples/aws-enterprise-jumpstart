@@ -1,0 +1,129 @@
+Description: Enterprise Jumpstart Baseline
+
+Parameters:
+  OrganizationId:
+    Type: String
+
+Resources:
+  OrganizationIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/id
+      Value: !Ref OrganizationId
+      Type: String
+  ConfigLogBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'config-log-archive-${OrganizationId}'
+      BucketEncryption:
+          ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+  ConfigLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ConfigLogBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: AWSConfigBucketPermissionsCheck
+          Effect: Allow
+          Principal:
+            Service:
+            - config.amazonaws.com
+          Action: s3:GetBucketAcl
+          Resource:
+          - !Sub "arn:${AWS::Partition}:s3:::${ConfigLogBucket}"
+        - Sid: AWSConfigBucketDelivery
+          Effect: Allow
+          Principal:
+            Service:
+            - config.amazonaws.com
+          Action: s3:PutObject
+          Resource:
+          - !Sub "arn:${AWS::Partition}:s3:::${ConfigLogBucket}/*"
+        - Sid: AllowSSLRequestsOnly
+          Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - !Sub "arn:aws:s3:::${ConfigLogBucket}"
+          - !Sub "arn:aws:s3:::${ConfigLogBucket}/*"
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+        - Sid: AWSBucketPermissionsCheck
+          Effect: Allow
+          Principal:
+            Service:
+            - config.amazonaws.com
+          Action: s3:GetBucketAcl
+          Resource:
+          - !Sub "arn:aws:s3:::${ConfigLogBucket}"
+        - Sid: AWSConfigBucketExistenceCheck
+          Effect: Allow
+          Principal:
+            Service:
+            - config.amazonaws.com
+          Action: s3:ListBucket
+          Resource:
+          - !Sub "arn:aws:s3:::${ConfigLogBucket}"
+  CloudTrailLogBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'cloudtrail-log-archive-${OrganizationId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  CloudTrailLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudTrailLogBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Sid: AWSCloudTrailBucketPermissionsCheck
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudtrail.amazonaws.com
+          Action: s3:GetBucketAcl
+          Resource:
+          - !Sub "arn:${AWS::Partition}:s3:::${CloudTrailLogBucket}"
+        - Sid: AWSCloudTrailBucketDelivery
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudtrail.amazonaws.com
+          Action: s3:PutObject
+          Resource:
+          - !Sub "arn:${AWS::Partition}:s3:::${CloudTrailLogBucket}/*"
+        - Sid: AllowSSLRequestsOnly
+          Effect: Deny
+          Principal: '*'
+          Action: s3:*
+          Resource:
+          - !Sub "arn:aws:s3:::${CloudTrailLogBucket}"
+          - !Sub "arn:aws:s3:::${CloudTrailLogBucket}/*"
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+        - Sid: AWSBucketPermissionsCheck
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudtrail.amazonaws.com
+          Action: s3:GetBucketAcl
+          Resource:
+          - !Sub "arn:aws:s3:::${CloudTrailLogBucket}"
+        - Sid: AWSCloudTrailBucketExistenceCheck
+          Effect: Allow
+          Principal:
+            Service:
+            - cloudtrail.amazonaws.com
+          Action: s3:ListBucket
+          Resource:
+          - !Sub "arn:aws:s3:::${CloudTrailLogBucket}"

@@ -1,0 +1,35 @@
+Description: Enterprise Jumpstart Baseline
+
+Parameters:
+  OrgRegions:
+    Type: List<String>
+    Default: eu-west-1
+  OrganizationId:
+    Type: String
+Resources:
+  OrganizationIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/id
+      Value: !Ref OrganizationId
+      Type: String
+  ConfigAggregatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: config.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSConfigRoleForOrganizations
+  OrgConfigAggregator:
+    Type: AWS::Config::ConfigurationAggregator
+    Properties:
+      ConfigurationAggregatorName: OrganizationAggregator
+      OrganizationAggregationSource:
+        AllAwsRegions: false
+        AwsRegions: !Ref OrgRegions
+        RoleArn: !GetAtt ConfigAggregatorRole.Arn

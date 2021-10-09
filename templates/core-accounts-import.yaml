@@ -1,0 +1,45 @@
+# This template can be used to import audit and/or log account into AWS Cloudformation if it already exists
+Description: Enterprise Jumpstart Core Accounts Deployment - Import Helper
+
+Parameters:
+  LogArchiveAccountEmail:
+    Type: String
+  AuditAccountEmail:
+    Type: String
+  DeploymentAccountEmail:
+    Type: String
+
+Resources:
+  LogsAccount:
+    DeletionPolicy: Retain
+    Type: ProServe::Organizations::Account
+    Properties:
+      AccountName: Logs
+      AccountEmail: !Ref LogArchiveAccountEmail
+      OrganizationalUnitId: '{{resolve:ssm:/org/organization-unit/core}}'
+      DeploymentAccountConfiguration:
+        AccountId: !Ref AWS::AccountId
+        RoleName: DeploymentAccountAccessRole
+        AWSManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      NotificationTopicArn: !ImportValue notification-topic-arn
+      Tags:
+      - Key: type
+        Value: core
+  AuditAccount:
+    DeletionPolicy: Retain
+    Type: ProServe::Organizations::Account
+    Properties:
+      AccountName: Audit
+      AccountEmail: !Ref AuditAccountEmail
+      OrganizationalUnitId: '{{resolve:ssm:/org/organization-unit/core}}'
+      DeploymentAccountConfiguration:
+        AccountId: !Ref AWS::AccountId
+        RoleName: DeploymentAccountAccessRole
+        AWSManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      NotificationTopicArn: !ImportValue notification-topic-arn
+      Tags:
+      - Key: type
+        Value: core
+

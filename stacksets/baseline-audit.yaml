@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enterprise Jumpstart Audit Account Regional Resources
+Parameters:
+  OrgId:
+    Type: 'String'
+
+Resources:
+  SnsKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Config SNS Topic Key
+      EnableKeyRotation: true
+      PendingWindowInDays: 20
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-default-1
+        Statement:
+        - Sid: Enable IAM User Permissions
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action: kms:*
+          Resource: '*'
+        - Sid: Allow use of the key
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - kms:DescribeKey
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyWithoutPlaintext
+          Resource: '*'
+          Condition:
+            StringEquals:
+              "aws:PrincipalOrgID": !Ref OrgId
+  SnsKmsAlias:
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: alias/config-sns
+      TargetKeyId: !Ref SnsKmsKey
+  ConfigTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'config-topic-${OrgId}'
+      DisplayName: AWS Config Notification Topic
+      KmsMasterKeyId: !Ref SnsKmsAlias
+  ConfigTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+      - !Ref ConfigTopic
+      PolicyDocument:
+        Statement:
+        - Sid: AWSConfigSNSPolicy
+          Action:
+          - sns:Publish
+          Effect: Allow
+          Resource: !Ref ConfigTopic
+          Principal:
+            Service:
+            - config.amazonaws.com
+        - Sid: AWSConfigSNSPolicyOrg
+          Action:
+          - sns:Publish
+          Effect: Allow
+          Resource: !Ref ConfigTopic
+          Principal:
+            AWS: "*"
+          Condition:
+            StringEquals:
+              "aws:PrincipalOrgID": !Ref OrgId

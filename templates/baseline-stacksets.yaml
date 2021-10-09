@@ -1,0 +1,228 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enterprise Jumpstart Base Stacksets
+
+Parameters:
+  StacksetFailureToleranceCount:
+    Type: Number
+    Default: 1
+  StacksetMaxConcurrentCount:
+    Type: Number
+    Default: 25
+  OrgRegions:
+    Type: AWS::SSM::Parameter::Value<List<String>>
+    Default: /org/regions
+  OrgAccountId:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /org/management-account/id
+Conditions:
+  DedicatedDeploymentAccount: !Not [!Equals [!Ref AWS::AccountId, !Ref OrgAccountId]]
+Resources:
+  OrgAccessRole:
+    Condition: DedicatedDeploymentAccount
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: '{{resolve:ssm:/org/deployment-account-access-role/name}}'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Ref AWS::AccountId
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action: "*"
+            Resource: "*"
+  StacksetAdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: cloudformation.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action:
+            - sts:AssumeRole
+            Resource: 'arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}'
+  StacksetBaselineAudit:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      Description: Baselines Config in AWS Accounts
+      OperationPreferences:
+        FailureToleranceCount: !Ref StacksetFailureToleranceCount
+        MaxConcurrentCount: !Ref StacksetMaxConcurrentCount
+        RegionConcurrencyType: PARALLEL
+      StackInstancesGroup:
+      - DeploymentTargets:
+          Accounts:
+          - '{{resolve:ssm:/org/security-audit-account/id}}'
+        Regions: !Ref OrgRegions
+      Parameters:
+      - ParameterKey: OrgId
+        ParameterValue: '{{resolve:ssm:/org/id}}'
+      PermissionModel: SELF_MANAGED
+      AdministrationRoleARN: !GetAtt StacksetAdminRole.Arn
+      ExecutionRoleName: '{{resolve:ssm:/org/deployment-account-access-role/name}}'
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Audit'
+      TemplateURL: ./stacksets/baseline-audit.yaml
+  StacksetBaselineRoles:
+    DependsOn: StacksetBaselineAudit
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      Description: Baselines Config in AWS Accounts
+      Capabilities:
+      - CAPABILITY_NAMED_IAM
+      OperationPreferences:
+        FailureToleranceCount: !Ref StacksetFailureToleranceCount
+        MaxConcurrentCount: !Ref StacksetMaxConcurrentCount
+        RegionConcurrencyType: PARALLEL
+      Parameters:
+      - ParameterKey: ManagedResourcePrefix
+        ParameterValue: '{{resolve:ssm:/org/prefix}}'
+      PermissionModel: SELF_MANAGED
+      AdministrationRoleARN: !GetAtt StacksetAdminRole.Arn
+      ExecutionRoleName: '{{resolve:ssm:/org/deployment-account-access-role/name}}'
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Roles'
+      TemplateURL: ./stacksets/baseline-roles.yaml
+  StacksetBaselineConfig:
+    DependsOn: StacksetBaselineRoles
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      Description: Baselines Config in AWS Accounts
+      Capabilities:
+      - CAPABILITY_NAMED_IAM
+      OperationPreferences:
+        FailureToleranceCount: !Ref StacksetFailureToleranceCount
+        MaxConcurrentCount: !Ref StacksetMaxConcurrentCount
+        RegionConcurrencyType: PARALLEL
+      Parameters:
+      - ParameterKey: HomeRegion
+        ParameterValue: !Ref AWS::Region
+      - ParameterKey: ManagedResourcePrefix
+        ParameterValue: '{{resolve:ssm:/org/prefix}}'
+      - ParameterKey: OrganizationAccountId
+        ParameterValue: '{{resolve:ssm:/org/management-account/id}}'
+      - ParameterKey: LogKmsKeyId
+        ParameterValue: '{{resolve:ssm:/org/management-account/kms-id}}'
+      - ParameterKey: SecurityAccountId
+        ParameterValue: '{{resolve:ssm:/org/security-audit-account/id}}'
+      - ParameterKey: AuditBucketName
+        ParameterValue: 'config-log-archive-{{resolve:ssm:/org/id}}'
+      - ParameterKey: OrganizationConfigTopicName
+        ParameterValue: 'config-topic-{{resolve:ssm:/org/id}}'
+      - ParameterKey: AWSLogsS3KeyPrefix
+        ParameterValue: '{{resolve:ssm:/org/id}}'
+      PermissionModel: SELF_MANAGED
+      AdministrationRoleARN: !GetAtt StacksetAdminRole.Arn
+      ExecutionRoleName: '{{resolve:ssm:/org/deployment-account-access-role/name}}'
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Config'
+      TemplateURL: ./stacksets/baseline-config.yaml
+  RolesBaselineCoreAccounts:
+    DependsOn: StacksetBaselineRoles
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Roles'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - '{{resolve:ssm:/org/log-archive-account/id}}'
+          - '{{resolve:ssm:/org/security-audit-account/id}}'
+        Regions:
+        - !Ref AWS::Region
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+  ConfigBaselineCoreAccounts:
+    DependsOn: RolesBaselineCoreAccounts
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Config'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - '{{resolve:ssm:/org/log-archive-account/id}}'
+          - '{{resolve:ssm:/org/security-audit-account/id}}'
+        Regions: !Ref OrgRegions
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+  RolesBaselineDeployment:
+    DependsOn: StacksetBaselineRoles
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Roles'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - !Ref AWS::AccountId
+        Regions:
+        - !Ref AWS::Region
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+  ConfigBaselineDeployment:
+    DependsOn:
+    - RolesBaselineDeployment
+    - StacksetBaselineConfig
+    - OrgAccessRole
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Config'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - !Ref AWS::AccountId
+        Regions: !Ref OrgRegions
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+  RolesBaselineOrg:
+    DependsOn: StacksetBaselineRoles
+    Condition: DedicatedDeploymentAccount
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Roles'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - '{{resolve:ssm:/org/management-account/id}}'
+        Regions:
+        - !Ref AWS::Region
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+  ConfigBaselineOrg:
+    DependsOn:
+    - RolesBaselineOrg
+    - StacksetBaselineConfig
+    Condition: DedicatedDeploymentAccount
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Config'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - '{{resolve:ssm:/org/management-account/id}}'
+        Regions: !Ref OrgRegions
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+

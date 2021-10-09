@@ -1,0 +1,222 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enterprise Jumpstart Basis Deployment Resources
+
+Parameters:
+  NotificationEmailAddress:
+    Type: String
+  ManagedResourcePrefix:
+    Type: String
+  OrgRegions:
+    Type: List<String>
+    Default: eu-west-1
+  OrganizationId:
+    Type: String
+  OrganizationManagementAccountId:
+    Type: String
+  OrganizationKmsKeyId:
+    Type: String
+Conditions:
+  DedicatedDeploymentAccount: !Not [!Equals [!Ref AWS::AccountId, !Ref OrganizationManagementAccountId]]
+Resources:
+  OrganizationIdParameter:
+    Condition: DedicatedDeploymentAccount
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/id
+      Value: !Ref OrganizationId
+      Type: String
+  OrganziationManagementAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/management-account/id
+      Value: !Ref OrganizationManagementAccountId
+      Type: String
+  OrganziationKmsKeyIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/management-account/kms-id
+      Value: !Ref OrganizationKmsKeyId
+      Type: String
+  OrganizationAccountAccessRoleNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/organization-account-access-role/name
+      Value: OrganizationAccountAccessRole
+      Type: String
+  DeploymentAccountAccessRoleNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/deployment-account-access-role/name
+      Value: !If [DedicatedDeploymentAccount, DeploymentAccountAccessRole, OrganizationAccountAccessRole]
+      Type: String
+  ManagedResourcePrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/prefix
+      Value: !Ref ManagedResourcePrefix
+      Type: String
+  OrgRegionsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/regions
+      Value: !Join [',', !Ref OrgRegions]
+      Type: StringList
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: aws-account-creation
+      Subscription:
+      - Endpoint: !Ref NotificationEmailAddress
+        Protocol: email
+  TopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+      - !Ref NotificationTopic
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+            - !GetAtt CfnStackInstancesExecutionRole.Arn
+            - !GetAtt CfnAccountResourceProviderExecutionRole.Arn
+          Action:
+          - sns:Publish
+          Resource: !Ref NotificationTopic
+  CfnLogAndMetricsDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      MaxSessionDuration: 43200
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - resources.cloudformation.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: LogAndMetricsDeliveryRolePolicy
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:DescribeLogGroups
+            - logs:DescribeLogStreams
+            - logs:PutLogEvents
+            - cloudwatch:ListMetrics
+            - cloudwatch:PutMetricData
+            Resource: "*"
+  CfnStackInstancesExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      MaxSessionDuration: 8400
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: resources.cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: ResourceTypePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                - "cloudformation:CreateStackInstances"
+                - "cloudformation:DeleteStackInstances"
+                - "cloudformation:Describe*"
+                - "cloudformation:DescribeStackInstances"
+                - "cloudformation:Get*"
+                - "cloudformation:List*"
+                - "cloudformation:ListStackInstances"
+                - "cloudformation:UpdateStackInstances"
+                Resource: "*"
+  CfnStacksetInstancesResourceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: ProServe-Cloudformation-StackInstances
+      RetentionInDays: 30
+  StacksetInstancesCfnResourceProvider:
+    Type: AWS::CloudFormation::ResourceVersion
+    Properties:
+      ExecutionRoleArn: !GetAtt CfnStackInstancesExecutionRole.Arn
+      SchemaHandlerPackage: s3://aws-enterprise-jumpstart/aws-cloudformation-stack-instances/proserve-cloudformation-stackinstances-v1.0.1.zip
+      TypeName: ProServe::Cloudformation::StackInstances
+      LoggingConfig:
+          LogGroupName: !Ref CfnStacksetInstancesResourceLogGroup
+          LogRoleArn: !GetAtt CfnLogAndMetricsDeliveryRole.Arn
+  CfnResourceProviderDefaultVersion:
+    Type: AWS::CloudFormation::ResourceDefaultVersion
+    Properties:
+      TypeName: ProServe::Cloudformation::StackInstances
+      TypeVersionArn: !Ref StacksetInstancesCfnResourceProvider
+  CfnAccountResourceProviderExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      MaxSessionDuration: 8400
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: resources.cloudformation.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: ResourceTypePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - "organizations:CreateAccount"
+            - "organizations:DescribeAccount"
+            - "organizations:DescribeCreateAccountStatus"
+            - "organizations:ListAccounts"
+            - "organizations:ListOrganizationalUnitsForParent"
+            - "organizations:ListParents"
+            - "organizations:ListRoots"
+            - "organizations:MoveAccount"
+            - "organizations:TagResource"
+            - "organizations:ListTagsForResource"
+            - "sns:Publish"
+            - "sts:AssumeRole"
+            Resource: "*"
+  CfnAccountResourceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: ProServe-Organizations-Account
+      RetentionInDays: 30
+  OrganizationsAccountCfnResourceProvider:
+    Type: AWS::CloudFormation::ResourceVersion
+    Properties:
+      ExecutionRoleArn: !GetAtt CfnAccountResourceProviderExecutionRole.Arn
+      SchemaHandlerPackage: s3://aws-enterprise-jumpstart/aws-organizations-account-resource/proserve-organizations-account-v1.0.7.zip
+      TypeName: ProServe::Organizations::Account
+      LoggingConfig:
+        LogGroupName: !Ref CfnAccountResourceLogGroup
+        LogRoleArn: !GetAtt CfnLogAndMetricsDeliveryRole.Arn
+  CfnAccountResourceProviderDefaultVersion:
+    Type: AWS::CloudFormation::ResourceDefaultVersion
+    Properties:
+      TypeName: ProServe::Organizations::Account
+      TypeVersionArn: !Ref OrganizationsAccountCfnResourceProvider
+
+Outputs:
+  NotificationTopicArn:
+    Value: !Ref NotificationTopic
+    Export:
+      Name: notification-topic-arn
+  DeploymentAccountAccessRoleName:
+    Value: !If [DedicatedDeploymentAccount, DeploymentAccountAccessRole, OrganizationAccountAccessRole]
+  OrganizationAccountResourceTypeArn:
+    Value: !GetAtt OrganizationsAccountCfnResourceProvider.TypeArn

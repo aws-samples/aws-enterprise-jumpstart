@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+Description: Enterprise Jumpstart Baseline
+
+Parameters:
+  OrganizationAccountAccessRoleName:
+    Type: String
+  OrgRegions:
+    Type: List<String>
+    Default: eu-west-1
+
+Resources:
+  DeleteDefaultVpcFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../scripts/
+      PackageType: Zip
+      Handler: default_vpc_removal.lambda_handler
+      Runtime: python3.8
+      Timeout: 300
+      Environment:
+        Variables:
+          REGIONS: !Join [',', !Ref OrgRegions]
+          ROLE_NAME: !Ref OrganizationAccountAccessRoleName
+      Policies:
+      - Version: 2012-10-17
+        Statement:
+        - Sid: AllowStsAssumeRole
+          Effect: Allow
+          Action:
+          - sts:AssumeRole
+          Resource:
+          - !Sub 'arn:aws:iam::*:role/${OrganizationAccountAccessRoleName}'
+      Events:
+        CreateAccount:
+          Type: EventBridgeRule
+          Properties:
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 60
+              MaximumRetryAttempts: 5
+            Pattern:
+              source:
+              - "aws.organizations"
+              detail-type:
+              - "AWS Service Event via CloudTrail"
+              detail:
+                awsRegion:
+                - "us-east-1"
+                eventSource:
+                - organizations.amazonaws.com
+                eventName:
+                - CreateAccountResult
+                serviceEventDetails:
+                  createAccountStatus:
+                    state:
+                    - "SUCCEEDED"

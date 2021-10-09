@@ -1,0 +1,57 @@
+Description: Enterprise Jumpstart Core Accounts Deployment
+
+Parameters:
+  LogArchiveAccountEmail:
+    Type: String
+  AuditAccountEmail:
+    Type: String
+
+Resources:
+  LogsAccount:
+    Type: ProServe::Organizations::Account
+    Properties:
+      AccountName: Logs
+      AccountEmail: !Ref LogArchiveAccountEmail
+      OrganizationalUnitId: '{{resolve:ssm:/org/organization-unit/core}}'
+      DeploymentAccountConfiguration:
+        AccountId: !Ref AWS::AccountId
+        RoleName: DeploymentAccountAccessRole
+        AWSManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      NotificationTopicArn: !ImportValue notification-topic-arn
+      Tags:
+      - Key: type
+        Value: core
+  LogArchiveAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/log-archive-account/id
+      Value: !GetAtt LogsAccount.AccountId
+      Type: String
+  AuditAccount:
+    Type: ProServe::Organizations::Account
+    Properties:
+      AccountName: Audit
+      AccountEmail: !Ref AuditAccountEmail
+      OrganizationalUnitId: '{{resolve:ssm:/org/organization-unit/core}}'
+      DeploymentAccountConfiguration:
+        AccountId: !Ref AWS::AccountId
+        RoleName: DeploymentAccountAccessRole
+        AWSManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      NotificationTopicArn: !ImportValue notification-topic-arn
+      Tags:
+      - Key: type
+        Value: core
+  AuditAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/security-audit-account/id
+      Value: !GetAtt AuditAccount.AccountId
+      Type: String
+
+Outputs:
+  LogArchiveAccountId:
+    Value: !GetAtt LogsAccount.AccountId
+  AuditAccountId:
+    Value: !GetAtt AuditAccount.AccountId

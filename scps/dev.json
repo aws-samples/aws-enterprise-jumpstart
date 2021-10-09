@@ -1,0 +1,188 @@
+{
+    "Statement": [
+        {
+            "Effect": "Deny",
+            "Sid": "ProtectConfig",
+            "Resource": "*",
+            "Action": [
+                "config:PutConfigRule",
+                "config:DeleteConfigRule",
+                "config:DeleteEvaluationResults",
+                "config:DeleteConfigurationAggregator",
+                "config:PutConfigurationAggregator",
+                "config:DeleteAggregationAuthorization",
+                "config:DeleteConfigurationRecorder",
+                "config:DeleteDeliveryChannel",
+                "config:DeleteRetentionConfiguration",
+                "config:PutConfigurationRecorder",
+                "config:PutDeliveryChannel",
+                "config:PutRetentionConfiguration",
+                "config:StopConfigurationRecorder"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                }
+            }
+        },
+        {
+            "Effect": "Deny",
+            "Sid": "ProtectNamespace",
+            "Resource": [
+                "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                "arn:aws:iam::*:role/{{resolve:ssm:/org/prefix}}*"
+            ],
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePermissionsBoundary",
+                "iam:DeleteRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePermissionsBoundary",
+                "iam:PutRolePolicy",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:UpdateRole",
+                "iam:UpdateRoleDescription",
+                "iam:PassRole"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                }
+            }
+        },
+        {
+            "Effect": "Deny",
+            "Sid": "DenyTagUsage",
+            "Resource": "*",
+            "Action": "*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                },
+                "ForAnyValue:StringLike": {
+                    "aws:TagKeys": "{{resolve:ssm:/org/prefix}}*"
+                }
+            }
+        },
+        {
+            "Effect": "Deny",
+            "Sid": "DenyUnmanagedRegions",
+            "Resource": "*",
+            "NotAction": [
+                "ec2:Describe*",
+                "a4b:*",
+                "acm:*",
+                "aws-marketplace-management:*",
+                "aws-marketplace:*",
+                "aws-portal:*",
+                "awsbillingconsole:*",
+                "budgets:*",
+                "ce:*",
+                "chime:*",
+                "cloudfront:*",
+                "config:*",
+                "cur:*",
+                "directconnect:*",
+                "ec2:DescribeRegions",
+                "ec2:DescribeTransitGateways",
+                "ec2:DescribeVpnGateways",
+                "fms:*",
+                "globalaccelerator:*",
+                "health:*",
+                "iam:*",
+                "importexport:*",
+                "kms:*",
+                "mobileanalytics:*",
+                "networkmanager:*",
+                "organizations:*",
+                "pricing:*",
+                "route53:*",
+                "route53domains:*",
+                "route53-recovery-readiness:*",
+                "route53-recovery-control-config:*",
+                "route53-recovery-cluster:*",
+                "s3:GetAccountPublic*",
+                "s3:ListAllMyBuckets",
+                "s3:ListBuckets",
+                "s3:PutAccountPublic*",
+                "shield:*",
+                "sts:*",
+                "support:*",
+                "trustedadvisor:*",
+                "waf-regional:*",
+                "waf:*",
+                "wafv2:*",
+                "wellarchitected:*"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                },
+                "StringNotEquals": {
+                    "aws:RequestedRegion": ["{{resolve:ssm:/org/regions}}"]
+                }
+            }
+        },
+        {
+            "Effect": "Deny",
+            "Sid": "DenyDefaultVpcCreation",
+            "Resource": "*",
+            "Action": [
+                "ec2:CreateDefaultSubnet",
+                "ec2:CreateDefaultVpc"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                }
+            }
+        },
+        {
+            "Effect": "Deny",
+            "Sid": "CloudformationProtection",
+            "Resource": [
+                "arn:*:cloudformation:*:*:stack/StackSet-*",
+                "arn:*:cloudformation:*:*:stack/{{resolve:ssm:/org/prefix}}*"
+            ],
+            "Action": [
+                "cloudformation:CancelUpdateStack",
+                "cloudformation:ContinueUpdateRollback",
+                "cloudformation:CreateChangeSet",
+                "cloudformation:CreateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:TagResource",
+                "cloudformation:UntagResource",
+                "cloudformation:UpdateStack",
+                "cloudformation:UpdateTerminationProtection"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                }
+            }
+        }
+    ],
+    "Version": "2012-10-17"
+}

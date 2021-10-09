@@ -1,0 +1,70 @@
+Description: Enterprise Jumpstart Account Blueprint AWS Service Catalog Products
+
+Parameters:
+  ProviderName:
+    Type: String
+    Default: Landing Zone Team
+
+Resources:
+  BlueprintPortfolio:
+    Type: AWS::ServiceCatalog::Portfolio
+    Properties:
+      Description: AWS Account Blueprints
+      DisplayName: Account Blueprints
+      ProviderName: !Ref ProviderName
+  CodebuildRoleAssignment:
+    Type: AWS::ServiceCatalog::PortfolioPrincipalAssociation
+    Properties:
+      PortfolioId: !Ref BlueprintPortfolio
+      PrincipalARN: '{{resolve:ssm:/pipeline/codebuild/role}}'
+      PrincipalType: IAM
+  Dev:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Description: AWS Development Account
+      Name: dev
+      Owner: !Ref ProviderName
+      ProvisioningArtifactParameters:
+      - Name: DUMMY
+        Description: Initial Version
+        Info:
+          LoadTemplateFromURL: https://aws-enterprise-jumpstart.s3.eu-west-1.amazonaws.com/account-blueprints/dummy.yaml
+  DevParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /blueprints/dev/id
+      Value: !Ref Dev
+      Type: String
+  DevPortfolioDevAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    Properties:
+      PortfolioId: !Ref BlueprintPortfolio
+      ProductId: !Ref Dev
+  DevLaunchConstraint:
+    DependsOn: DevPortfolioDevAssociation
+    Type: AWS::ServiceCatalog::LaunchRoleConstraint
+    Properties:
+      Description: Dev Account Launch Constraint
+      PortfolioId: !Ref BlueprintPortfolio
+      ProductId: !Ref Dev
+      RoleArn: !GetAtt ServiceCatalogLaunchRole.Arn
+  ServiceCatalogLaunchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: '{{resolve:ssm:/org/prefix}}-sc-launch'
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: servicecatalog.amazonaws.com
+          Action:
+          - sts:AssumeRole
+
+Outputs:
+  BlueprintPortfolioId:
+    Value: !Ref BlueprintPortfolio
+  DevProductId:
+    Value: !Ref Dev

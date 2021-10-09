@@ -1,0 +1,24 @@
+version: 0.2
+cache:
+  paths:
+  - ~/.cache/pip/**/*
+phases:
+  install:
+    runtime-versions:
+      python: 3.8
+    commands:
+      - pip install boto3 cfn-flip
+  pre_build:
+    commands:
+    - echo "Building with $(python --version)"
+  build:
+    commands:
+    - python scripts/core_account_baseline.py
+  post_build:
+    commands:
+    - echo Build completed on $(date)
+artifacts:
+  files:
+  - build/*
+
+ 

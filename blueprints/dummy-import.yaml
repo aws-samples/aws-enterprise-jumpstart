@@ -1,0 +1,38 @@
+Description: Development Account
+
+Parameters:
+  AccountName:
+    Type: String
+  AccountEmail:
+    Type: String
+  OrgRegions:
+    Type: AWS::SSM::Parameter::Value<List<String>>
+    Default: /org/regions
+  
+Resources:
+  Account:
+    DeletionPolicy: Retain
+    Type: ProServe::Organizations::Account
+    Properties:
+      AccountName: !Ref AccountName
+      AccountEmail: !Ref AccountEmail
+      OrganizationalUnitId: '{{resolve:ssm:/org/organization-unit/dev}}'
+      DeploymentAccountConfiguration:
+        AccountId: !Ref AWS::AccountId
+        RoleName: DeploymentAccountAccessRole
+        AWSManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      NotificationTopicArn: !ImportValue notification-topic-arn
+      Tags:
+      - Key: type
+        Value: dev
+  DummyParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /account/${AccountName}
+      Value: !Ref AccountEmail
+      Type: String
+
+Outputs:
+  AccountName:
+    Value: !Ref AccountName

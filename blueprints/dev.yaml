@@ -1,0 +1,59 @@
+Description: Development Account
+
+Parameters:
+  AccountName:
+    Type: String
+  AccountEmail:
+    Type: String
+  OrgRegions:
+    Type: AWS::SSM::Parameter::Value<List<String>>
+    Default: /org/regions
+  
+Resources:
+  Account:
+    Type: ProServe::Organizations::Account
+    Properties:
+      AccountName: !Ref AccountName
+      AccountEmail: !Ref AccountEmail
+      OrganizationalUnitId: '{{resolve:ssm:/org/organization-unit/dev}}'
+      DeploymentAccountConfiguration:
+        AccountId: !Ref AWS::AccountId
+        RoleName: DeploymentAccountAccessRole
+        AWSManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      NotificationTopicArn: !ImportValue notification-topic-arn
+      Tags:
+      - Key: type
+        Value: dev
+  RolesBaseline:
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Roles'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - !Ref Account
+        Regions:
+        - !Ref AWS::Region
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+  ConfigBaseline:
+    DependsOn: RolesBaseline
+    Type: ProServe::Cloudformation::StackInstances
+    Properties:
+      StackSetName: '{{resolve:ssm:/org/prefix}}-Baseline-Config'
+      StackInstances:
+        DeploymentTargets:
+          Accounts:
+          - !Ref Account
+        Regions: !Ref OrgRegions
+      OperationPreferences:
+        RegionConcurrencyType: PARALLEL
+        FailureToleranceCount: 0
+        MaxConcurrentCount: 1
+
+Outputs:
+  AccountId:
+    Value: !Ref Account

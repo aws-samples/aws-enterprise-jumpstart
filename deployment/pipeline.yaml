@@ -1,0 +1,930 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Pipeline for Enterprise Jumpstart
+
+Parameters:
+  UseDedicatedDeploymentAccount:
+    Description: Set to true if the account this template is deployed is NOT the organization management account.
+    Type: String
+    AllowedValues:
+    - True
+    - False
+    Default: True
+  ManagedResourcePrefix:
+    Type: String
+    Default: ent-jumpstart
+  RepositorySourceBranch:
+    Type: String
+    Default: main
+  OrganizationManagementAccountId:
+    Type: String
+  AuditAccountId:
+    Type: String
+  LogsAccountId:
+    Type: String
+
+
+Conditions:
+  UseDedicatedDeploymentAccount: !Equals [!Ref UseDedicatedDeploymentAccount, true]
+  AuditAccountEmpty: !Equals [!Ref AuditAccountId, '']
+  LogAccountEmpty: !Equals [!Ref LogsAccountId, '']
+  LogOrAuditEmpty: !Or [Condition: LogAccountEmpty, Condition: AuditAccountEmpty]
+
+Resources:
+  CodeCommitUser:
+    Type: AWS::IAM::User
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
+      UserName: CodeCommitUser
+  EntJumpstartRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryDescription: AWS Enterprise Jumpstart Assets and Code
+      RepositoryName: !Ref ManagedResourcePrefix
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Used by Assumed Roles in Audit/Logs accounts to Encrypt/Decrypt code
+      EnableKeyRotation: true
+      MultiRegion: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: !Ref AWS::StackName
+        Statement:
+        - Sid: Allows admin of the key
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - "kms:Create*"
+          - "kms:Describe*"
+          - "kms:Enable*"
+          - "kms:List*"
+          - "kms:Put*"
+          - "kms:Update*"
+          - "kms:Revoke*"
+          - "kms:Disable*"
+          - "kms:Get*"
+          - "kms:Delete*"
+          - "kms:ScheduleKeyDeletion"
+          - "kms:CancelKeyDeletion"
+          - "kms:ReplicateKey"
+          Resource: "*"
+        - Sid: Allow use of the key for Audit/Logs account
+          Effect: Allow
+          Principal:
+            AWS:
+            - !If [AuditAccountEmpty, !Ref AWS::NoValue, !Sub 'arn:aws:iam::${AuditAccountId}:root']
+            - !If [LogAccountEmpty, !Ref AWS::NoValue, !Sub 'arn:aws:iam::${LogsAccountId}:root']
+            - !Sub arn:aws:iam::${OrganizationManagementAccountId}:root
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:DescribeKey
+          Resource: "*"
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${ManagedResourcePrefix}-codepipeline
+      TargetKeyId: !Ref KMSKey
+  ArtifactBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            KMSMasterKeyID: !Ref KMSKey
+            SSEAlgorithm: 'aws:kms'
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - 's3:GetObject'
+          Effect: Allow
+          Resource: !Join
+          - ''
+          - - 'arn:aws:s3:::'
+            - !Ref ArtifactBucket
+            - /*
+          Principal:
+            AWS:
+            - !If [ AuditAccountEmpty, !Ref AWS::NoValue, !Sub 'arn:aws:iam::${AuditAccountId}:root' ]
+            - !If [ LogAccountEmpty, !Ref AWS::NoValue, !Sub 'arn:aws:iam::${LogsAccountId}:root' ]
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+            - !Sub arn:aws:iam::${OrganizationManagementAccountId}:root
+  BucketAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Allow usage of custom resource
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:Get*
+          - s3:Put*
+          - s3:List*
+          Resource:
+          - !Sub arn:aws:s3:::${ArtifactBucket}/*
+          - !Sub arn:aws:s3:::${ArtifactBucket}
+          - !Sub 'arn:aws:s3:::${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts'
+          - !Sub 'arn:aws:s3:::${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts/*'
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - cloudformation.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      - arn:aws:iam::aws:policy/AdministratorAccess
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: DeployAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - logs:*
+            Effect: Allow
+            Resource:
+            - Fn::Sub:
+              - 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${Prefix}*'
+              - Prefix: !Ref ManagedResourcePrefix
+          - Action:
+            - kms:*
+            Effect: Allow
+            Resource: !GetAtt KMSKey.Arn
+          - Action:
+            - ssm:Get*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - servicecatalog:*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - cloudformation:ValidateTemplate
+            - cloudformation:SetTypeConfiguration
+            - cloudformation:List*
+            - cloudformation:Describe*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:TagResource
+            - cloudformation:UntagResource
+            Effect: Allow
+            Resource: !Sub arn:aws:cloudformation:*:${AWS::AccountId}:stack/${ManagedResourcePrefix}*
+          - Action:
+            - sts:AssumeRole
+            Effect: Allow
+            Resource:
+            - Fn::If:
+              - UseDedicatedDeploymentAccount
+              - 'arn:aws:iam::*:role/DeploymentAccountAccessRole'
+              - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+          - Action:
+            - iam:PassRole
+            Effect: Allow
+            Resource: !GetAtt CloudFormationRole.Arn
+  CodeBuildServiceRoleParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /pipeline/codebuild/role
+      Value: !GetAtt CodeBuildServiceRole.Arn
+      Type: String
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - codepipeline.amazonaws.com
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: CodePipelineAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - iam:PassRole
+            Effect: Allow
+            Resource:
+            - !GetAtt CodeBuildServiceRole.Arn
+            - !GetAtt CloudFormationRole.Arn
+          - Action:
+            - sts:AssumeRole
+            Effect: Allow
+            Resource:
+            - 'arn:aws:iam::*:role/DeploymentAccountAccessRole'
+            - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+            - !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/${ManagedResourcePrefix}*'
+          - Action:
+            - cloudformation:DescribeStacks
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:DeleteStack
+            - cloudformation:SetStackPolicy
+            Effect: Allow
+            Resource:
+            - Fn::Sub:
+              - arn:aws:cloudformation:${AWS::Region}:*:stack/${Prefix}*
+              - Prefix: !Ref ManagedResourcePrefix
+            - Fn::Sub:
+              - arn:aws:cloudformation:us-east-1:*:stack/${Prefix}*
+              - Prefix: !Ref ManagedResourcePrefix
+          - Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            - kms:DescribeKey
+            Effect: Allow
+            Resource:
+            - !GetAtt KMSKey.Arn
+            - !Sub arn:aws:kms:us-east-1:${AWS::AccountId}:key/*
+          - Action:
+            - codebuild:*
+            Effect: Allow
+            Resource:
+            - !GetAtt CodeBuildProjectPackage.Arn
+            - !GetAtt CodeBuildProjectScps.Arn
+            - !GetAtt CodeBuildProjectBlueprints.Arn
+            - !GetAtt CodeBuildProjectBaseline.Arn
+            - !GetAtt CodeBuildProjectBaselineCoreAccounts.Arn
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+  EventsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - events.amazonaws.com
+      Policies:
+      - PolicyName: AllowCodePipelineTrigger
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - codepipeline:StartPipelineExecution
+            Resource:
+              Fn::Sub: arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+  PipelineTrigger:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub CodeCommit.Push to trigger CodePipeline for ${ManagedResourcePrefix}
+      State: ENABLED
+      EventPattern:
+        source:
+        - aws.codecommit
+        detail-type:
+        - 'CodeCommit Repository State Change'
+        resources:
+        - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+        detail:
+          event:
+          - referenceCreated
+          - referenceUpdated
+          referenceType:
+          - branch
+          - tag
+          referenceName:
+          - !Ref RepositorySourceBranch
+      Targets:
+      - Id: TargetCodePipeline
+        Arn:
+          Fn::Sub: arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+        RoleArn:
+          Fn::GetAtt:
+          - EventsRole
+          - Arn
+  CodeBuildProjectPackage:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/assets
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_NAME_US_EAST_1
+          Value: !Sub ${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts
+        - Name: ARTIFACTS_BUCKET_CFN_ASSET_PREFIX
+          Value: cfn-assets
+        - Name: PACKAGE_NORTH_VIRGINIA
+          Value: !If [LogOrAuditEmpty, 'false', 'true']
+      Name: !Sub ${ManagedResourcePrefix}-package
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectPackage}
+      RetentionInDays: 30
+  CodeBuildProjectScps:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/Scps
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: scps/buildspec.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_SC_ASSET_PREFIX
+          Value: scp-assets
+      Name:
+        Fn::Sub:
+        - ${Prefix}-scps
+        - Prefix: !Ref ManagedResourcePrefix
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupScps:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectScps}
+      RetentionInDays: 30
+  CodeBuildProjectBaseline:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/Baseline
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec_baseline.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_ASSET_PREFIX
+          Value: baseline-assets
+        - Name: ARTIFACTS_KMS_KEY_ARN
+          Value: !GetAtt KMSKey.Arn
+        - Name: JUMPSTART_CFN_ROLE_ARN
+          Value: !GetAtt CloudFormationRole.Arn
+      Name:
+        Fn::Sub:
+        - ${Prefix}-baseline
+        - Prefix: !Ref ManagedResourcePrefix
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupBaseline:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectBaseline}
+      RetentionInDays: 30
+  CodeBuildProjectBaselineCoreAccounts:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/BaselineCoreAccounts
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec_baseline_core_accounts.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_ASSET_PREFIX
+          Value: baseline-core-assets
+      Name:
+        Fn::Sub:
+        - ${Prefix}-baseline-core-accounts
+        - Prefix: !Ref ManagedResourcePrefix
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupBaselineCoreAccounts:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectBaselineCoreAccounts}
+      RetentionInDays: 30
+  CodeBuildProjectBlueprints:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/Blueprints
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: blueprints/buildspec.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_SC_ASSET_PREFIX
+          Value: blueprint-assets
+      Name:
+        Fn::Sub:
+        - ${Prefix}-blueprints
+        - Prefix: !Ref ManagedResourcePrefix
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupBlueprints:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectBlueprints}
+      RetentionInDays: 30
+  CodeBuildProjectAccountUpgrade:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/AccountUpgrade
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Source:
+        Type: CODECOMMIT
+        Location: !GetAtt EntJumpstartRepository.CloneUrlHttp
+        BuildSpec: blueprints/buildspec_account_upgrade.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_SC_ASSET_PREFIX
+          Value: account-upgrade-assets
+      Name:
+        Fn::Sub:
+        - ${Prefix}-account-upgrade
+        - Prefix: !Ref ManagedResourcePrefix
+      TimeoutInMinutes: 480
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupAccountUpgrade:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectAccountUpgrade}
+      RetentionInDays: 30
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStores:
+      - Region: !Ref AWS::Region
+        ArtifactStore:
+          EncryptionKey:
+            Id: !Ref KMSKey
+            Type: KMS
+          Type: S3
+          Location: !Ref ArtifactBucket
+      - Fn::If:
+        - LogOrAuditEmpty
+        - !Ref AWS::NoValue
+        - Region: us-east-1
+          ArtifactStore:
+            EncryptionKey:
+              Id: !Ref KMSKey
+              Type: KMS
+            Type: S3
+            Location: !Sub '${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts'
+      Name: !Ref ManagedResourcePrefix
+      RoleArn:
+        Fn::GetAtt:
+        - PipelineRole
+        - Arn
+      Stages:
+      - Name: Sources
+        Actions:
+        - Name: GetSources
+          ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Version: '1'
+            Provider: CodeCommit
+          OutputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            BranchName: !Ref RepositorySourceBranch
+            RepositoryName: !Ref ManagedResourcePrefix
+            PollForSourceChanges: false
+          RunOrder: 1
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectPackage
+          InputArtifacts:
+          - Name: complete-sources
+          OutputArtifacts:
+          - Name: stacks
+          RunOrder: 1
+      - Name: DeployJumpstart
+        Actions:
+        - Name: ManagementBaseline
+          Namespace: org
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: complete-sources
+          RoleArn: !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/{{resolve:ssm:/org/deployment-account-access-role/name}}'
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM
+            RoleArn: !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/CfnAdmin'
+            StackName: !Sub
+            - ${Prefix}-base
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: complete-sources::templates/org-management.yaml
+            TemplateConfiguration: complete-sources::parameter/org-management.json
+          RunOrder: 1
+        - Name: AutomationBaseline
+          Namespace: automation
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-base
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-template.yaml
+            TemplateConfiguration: complete-sources::parameter/automation.json
+          RunOrder: 1
+        - Name: BaselineScript
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectBaseline
+            EnvironmentVariables: >-
+              [
+                {
+                  "name":"ORG_ACCOUNT_RESOURCE_TYPE_ARN",
+                  "value":"#{automation.OrganizationAccountResourceTypeArn}",
+                  "type":"PLAINTEXT"
+                }
+              ]
+          InputArtifacts:
+          - Name: complete-sources
+          RunOrder: 2
+        - Fn::If:
+          - LogOrAuditEmpty
+          - !Ref AWS::NoValue
+          - Name: BaselineNorthVirginia
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: CloudFormation
+              Version: '1'
+            InputArtifacts:
+            - Name: stacks
+            - Name: complete-sources
+            RoleArn: !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/DeploymentAccountAccessRole'
+            Configuration:
+              ActionMode: CREATE_UPDATE
+              Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+              RoleArn: !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/CfnAdmin'
+              ParameterOverrides: >-
+                {
+                  "OrganizationAccountAccessRoleName": "OrganizationAccountAccessRole"
+                }
+              StackName: !Sub
+              - ${Prefix}-base
+              - Prefix: !Ref ManagedResourcePrefix
+              TemplatePath: stacks::build/packaged-template-us-east-1.yaml
+              TemplateConfiguration: complete-sources::parameter/org-management-us-east-1.json
+            Region: us-east-1
+            RunOrder: 3
+        - Name: DeployScps
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectScps
+          InputArtifacts:
+          - Name: complete-sources
+          RunOrder: 3
+        - Name: CoreAccounts
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-core-accounts
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: complete-sources::templates/core-accounts.yaml
+            TemplateConfiguration: complete-sources::parameter/core-accounts.json
+          RunOrder: 3
+        - Name: BaselineCoreAccountsScript
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectBaselineCoreAccounts
+          InputArtifacts:
+          - Name: complete-sources
+          RunOrder: 4
+        - Fn::If:
+          - AuditAccountEmpty
+          - !Ref AWS::NoValue
+          - Name: SecurityAuditBaseline
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: CloudFormation
+              Version: '1'
+            InputArtifacts:
+            - Name: complete-sources
+            RoleArn:
+             Fn::If:
+             - UseDedicatedDeploymentAccount
+             - !Sub 'arn:aws:iam::${AuditAccountId}:role/DeploymentAccountAccessRole'
+             - !Sub 'arn:aws:iam::${AuditAccountId}:role/OrganizationAccountAccessRole'
+            Configuration:
+              ActionMode: CREATE_UPDATE
+              Capabilities: CAPABILITY_IAM
+              StackName: !Sub
+              - ${Prefix}-audit
+              - Prefix: !Ref ManagedResourcePrefix
+              RoleArn: !Sub 'arn:aws:iam::${AuditAccountId}:role/CfnAdmin'
+              TemplatePath: complete-sources::templates/audit.yaml
+              TemplateConfiguration: complete-sources::parameter/audit.json
+            RunOrder: 5
+        - Fn::If:
+          - LogAccountEmpty
+          - !Ref AWS::NoValue
+          - Name: LogArchiveBaseline
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: CloudFormation
+              Version: '1'
+            InputArtifacts:
+            - Name: complete-sources
+            RoleArn:
+              Fn::If:
+              - UseDedicatedDeploymentAccount
+              - !Sub 'arn:aws:iam::${LogsAccountId}:role/DeploymentAccountAccessRole'
+              - !Sub 'arn:aws:iam::${LogsAccountId}:role/OrganizationAccountAccessRole'
+            Configuration:
+              ActionMode: CREATE_UPDATE
+              StackName: !Sub
+              - ${Prefix}-log
+              - Prefix: !Ref ManagedResourcePrefix
+              RoleArn: !Sub 'arn:aws:iam::${LogsAccountId}:role/CfnAdmin'
+              TemplatePath: complete-sources::templates/logs.yaml
+              TemplateConfiguration: complete-sources::parameter/log.json
+            RunOrder: 5
+        - Name: AccountBlueprints
+          Namespace: blueprints
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM
+            StackName: !Sub
+            - ${Prefix}-blueprints
+            - Prefix: !Ref ManagedResourcePrefix
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            TemplatePath: complete-sources::blueprints/portfolio.yaml
+            TemplateConfiguration: complete-sources::parameter/portfolio.json
+          RunOrder: 5
+        - Name: UpdateBlueprints
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectBlueprints
+            EnvironmentVariables: >-
+              [
+                {
+                  "name": "dev",
+                  "value": "#{blueprints.DevProductId}",
+                  "type": "PLAINTEXT"
+                }
+              ]
+          InputArtifacts:
+          - Name: complete-sources
+          RunOrder: 6
+        - Fn::If:
+          - LogOrAuditEmpty
+          - !Ref AWS::NoValue
+          - Name: BaselineStacksets
+            ActionTypeId:
+              Category: Deploy
+              Owner: AWS
+              Provider: CloudFormation
+              Version: '1'
+            InputArtifacts:
+            - Name: stacks
+            - Name: complete-sources
+            Configuration:
+              ActionMode: CREATE_UPDATE
+              Capabilities: CAPABILITY_NAMED_IAM
+              RoleArn:
+                Fn::GetAtt:
+                - CloudFormationRole
+                - Arn
+              StackName: !Sub
+              - ${Prefix}-baseline-stacksets
+              - Prefix: !Ref ManagedResourcePrefix
+              TemplatePath: stacks::build/packaged-template-baseline.yaml
+              TemplateConfiguration: complete-sources::parameter/baseline.json
+            RunOrder: 6
+
+

@@ -1,0 +1,10 @@
+{
+  "Parameters": {
+    "UseDedicatedDeploymentAccount": "true",
+    "ManagedResourcePrefix": "ent-jumpstart",
+    "RepositorySourceBranch": "main",
+    "OrganizationManagementAccountId": "99999999999",
+    "AuditAccountId": "99999999999",
+    "LogsAccountId": "99999999999"
+  }
+}

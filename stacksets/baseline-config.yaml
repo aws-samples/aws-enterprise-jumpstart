@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enterprise Jumpstart Config Baseline
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: 'String'
+    Description: 'Prefix for the managed resources'
+  OrganizationConfigTopicName:
+    Type: String
+    Description: All Configuration Notification SNS Topic in Security Account that AWS Config delivers notifications to.
+  OrganizationAccountId:
+    Type: 'String'
+    Description: AWS Account Id of the Organization account.
+  LogKmsKeyId:
+    Type: 'String'
+    Description: KMS Key Id of the central logging data.
+  SecurityAccountId:
+    Type: 'String'
+    Description: AWS Account Id of the Security account.
+  AuditBucketName:
+    Type: String
+    Description: Audit Bucket name from the Log Archive Account
+  AWSLogsS3KeyPrefix:
+    Type: 'String'
+    Description: Organization ID to use as the S3 Key prefix for storing the audit logs
+  HomeRegion:
+    Type: 'String'
+    Description: The name of the home region for the customer
+
+Mappings:
+  Settings:
+    FrequencyMap:
+      1hour   : One_Hour
+      3hours  : Three_Hours
+      6hours  : Six_Hours
+      12hours : Twelve_Hours
+      24hours : TwentyFour_Hours
+Resources:
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      Name: !Sub ${ManagedResourcePrefix}-BaselineConfigRecorder
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/${ManagedResourcePrefix}-ConfigRecorderRole
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    Properties:
+      Name: !Sub ${ManagedResourcePrefix}-BaselineConfigDeliveryChannel
+      ConfigSnapshotDeliveryProperties:
+        DeliveryFrequency: !FindInMap
+        - Settings
+        - FrequencyMap
+        - 1hour
+      S3BucketName: !Ref AuditBucketName
+      S3KeyPrefix: !Ref AWSLogsS3KeyPrefix
+      S3KmsKeyArn: !Sub arn:aws:kms:${HomeRegion}:${OrganizationAccountId}:key/${LogKmsKeyId}
+      SnsTopicARN: !Sub arn:aws:sns:${AWS::Region}:${SecurityAccountId}:${OrganizationConfigTopicName}
+
+Outputs:
+  BaselineConfigRecorder:
+    Description: Baseline Config Recorder
+    Value:  !Ref ConfigRecorder
+  BaselineConfigDeliveryChannel:
+    Description: Baseline Config Delivery Channel
+    Value: !Ref ConfigDeliveryChannel

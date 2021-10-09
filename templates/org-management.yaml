@@ -1,0 +1,144 @@
+Description: Enterprise Jumpstart Organizations Payer Account Resources
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ent-jumpstart
+  CoreOrganizationalUnit:
+    Type: String
+    Default: Core
+  FoundationOrganizationalUnit:
+    Type: String
+    Default: Foundation
+  OrganizationId:
+    Type: String
+  DeploymentAccountId:
+    Type: String
+    Default: ''
+Conditions:
+  DeploymentAccountExists: !Not [!Equals [!Ref DeploymentAccountId, '']]
+Resources:
+  DeploymentAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/deployment-account/id
+      Value: !If [DeploymentAccountExists, !Ref DeploymentAccountId, !Ref AWS::AccountId]
+      Type: String
+  OrganizationIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/id
+      Value: !Ref OrganizationId
+      Type: String
+  DeploymentAccountOrgAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DeploymentAccountAccessRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AdministratorAccess
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !GetAtt DeploymentAccountIdParameter.Value
+          Action: sts:AssumeRole
+  CfnAdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CfnAdmin
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: cloudformation.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - iam:*
+            Resource:
+            - !Sub arn:aws:iam::${AWS::AccountId}:role/CfnAdmin
+            - !Sub arn:aws:iam::${AWS::AccountId}:role/${ManagedResourcePrefix}*
+          - Effect: Allow
+            Action:
+            - kms:*
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - ssm:GetParameter*
+            - ssm:PutParameter
+            - ssm:LabelParameterVersion
+            - ssm:DeleteParameter*
+            - ssm:DescribeParameters
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - lambda:*
+            Resource:
+            - !Sub arn:aws:lambda:us-east-1:${AWS::AccountId}:function:${ManagedResourcePrefix}*
+          - Effect: Allow
+            Action:
+            - events:*
+            Resource:
+            - !Sub arn:aws:events:us-east-1:${AWS::AccountId}:rule/${ManagedResourcePrefix}*
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            Resource: !Sub "arn:aws:s3:::ejs-${DeploymentAccountIdParameter.Value}-us-east-1-artifacts/*"
+  LogBucketKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Organization Log Archive Key
+      EnableKeyRotation: true
+      PendingWindowInDays: 20
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-default-1
+        Statement:
+        - Sid: Enable IAM User Permissions
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action: kms:*
+          Resource: '*'
+        - Sid: Allow use of the key
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - kms:DescribeKey
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyWithoutPlaintext
+          Resource: '*'
+          Condition:
+            StringEquals:
+              "aws:PrincipalOrgID": !GetAtt OrganizationIdParameter.Value
+        - Sid: Allow CloudTrail use of the key
+          Effect: Allow
+          Principal:
+            Service:
+            - "cloudtrail.amazonaws.com"
+            - "config.amazonaws.com"
+          Action:
+          - kms:GenerateDataKey
+          - kms:Decrypt
+          Resource: '*'
+  LogBucketAlias:
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: alias/central-log-bucket-key
+      TargetKeyId: !Ref LogBucketKmsKey
+
+Outputs:
+  OrganizationKmsKeyId:
+    Value: LogBucketKmsKey

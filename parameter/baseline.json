@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "StacksetFailureToleranceCount": "1",
+    "StacksetMaxConcurrentCount": "25",
+    "OrgRegions": "/org/regions"
+  }
+}

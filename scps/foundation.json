@@ -1,0 +1,192 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ProtectConfig",
+            "Effect": "Deny",
+            "Action": [
+                "config:PutConfigRule",
+                "config:DeleteConfigRule",
+                "config:DeleteEvaluationResults",
+                "config:DeleteConfigurationAggregator",
+                "config:PutConfigurationAggregator",
+                "config:DeleteAggregationAuthorization",
+                "config:DeleteConfigurationRecorder",
+                "config:DeleteDeliveryChannel",
+                "config:DeleteRetentionConfiguration",
+                "config:PutConfigurationRecorder",
+                "config:PutDeliveryChannel",
+                "config:PutRetentionConfiguration",
+                "config:StopConfigurationRecorder"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "ProtectConfigAggregator",
+            "Effect": "Deny",
+            "Action": [
+                "config:DeleteConfigurationAggregator",
+                "config:PutConfigurationAggregator"
+            ],
+            "Resource": "arn:aws:config:*:*:config-aggregator/*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                        "arn:aws:iam::*:role/CfnAdmin"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "ProtectConfigSns",
+            "Effect": "Deny",
+            "Action": [
+                "sns:DeleteTopic",
+                "sns:SetTopicAttributes",
+                "sns:AddPermission",
+                "sns:RemovePermission"
+            ],
+            "Resource": "arn:aws:sns:*:*:config-topic*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                        "arn:aws:iam::*:role/CfnAdmin"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "ProtectNamespace",
+            "Effect": "Deny",
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:DeleteRolePermissionsBoundary",
+                "iam:DeleteRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePermissionsBoundary",
+                "iam:PutRolePolicy",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:UpdateRole",
+                "iam:UpdateRoleDescription"
+            ],
+            "Resource": [
+                "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                "arn:aws:iam::*:role/CfnAdmin"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/prefix}}*"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "DenyTagUsage",
+            "Effect": "Deny",
+            "Action": "*",
+            "Resource": "*",
+            "Condition": {
+                "ForAnyValue:StringLike": {
+                    "aws:TagKeys": "{{resolve:ssm:/org/prefix}}*"
+                },
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                        "arn:aws:iam::*:role/CfnAdmin",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/prefix}}*"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "DenyDefaultVpcCreation",
+            "Effect": "Deny",
+            "Action": [
+                "ec2:CreateDefaultSubnet",
+                "ec2:CreateDefaultVpc"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "CloudformationProtection",
+            "Effect": "Deny",
+            "Action": [
+                "cloudformation:CancelUpdateStack",
+                "cloudformation:ContinueUpdateRollback",
+                "cloudformation:CreateChangeSet",
+                "cloudformation:CreateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:TagResource",
+                "cloudformation:UntagResource",
+                "cloudformation:UpdateStack",
+                "cloudformation:UpdateTerminationProtection"
+            ],
+            "Resource": [
+                "arn:*:cloudformation:*:*:stack/StackSet-*"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                        "arn:aws:iam::*:role/CfnAdmin",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/prefix}}*"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "ProtectLoggingBuckets",
+            "Effect": "Deny",
+            "Action": [
+                "s3:DeleteBucket",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutLifecycleConfiguration",
+                "s3:PutBucketLogging",
+                "s3:PutBucketPolicy",
+                "s3:DeleteBucketPolicy"
+            ],
+            "Resource": [
+                "arn:aws:s3:::config-log-archive-o-*",
+                "arn:aws:s3:::cloudtrail-log-archive-o-*"
+            ],
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}",
+                        "arn:aws:iam::*:role/CfnAdmin"
+                    ]
+                }
+            }
+        }
+    ]
+}
