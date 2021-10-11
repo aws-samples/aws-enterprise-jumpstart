@@ -681,7 +681,7 @@ Resources:
             Version: '1'
           InputArtifacts:
           - Name: complete-sources
-          RoleArn: !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/{{resolve:ssm:/org/deployment-account-access-role/name}}'
+          RoleArn: !Sub 'arn:aws:iam::${OrganizationManagementAccountId}:role/DeploymentAccountAccessRole'
           Configuration:
             ActionMode: CREATE_UPDATE
             Capabilities: CAPABILITY_NAMED_IAM
