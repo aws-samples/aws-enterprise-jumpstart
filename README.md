@@ -63,7 +63,8 @@ This repository holds one option to stand up a basic cloud foundation. It covers
 9. Update the pipeline cloudformation stack with correct audit, log archive account id parameter values
 10. Run Automation Pipeline, wait for it being successful
 11. Enable AWS CloudTrail Organization Trail in Management Account using bucket created in log archive account and KMS key id found in parameter store
-    `aws cloudtrail create-trail --name org-trail --s3-bucket-name cloudtrail-log-archive-<org-id> --kms-key-id <org-kms-key-id> --is-multi-region-trail --include-global-service-events --is-organization-trail --region <home-region>`
+    `aws cloudtrail create-trail --name org-trail --s3-bucket-name cloudtrail-log-archive-<org-id> --kms-key-id <org-kms-key-id> --is-multi-region-trail --include-global-service-events --is-organization-trail --enable-log-file-validation --region <home-region>`
+12. Start trail logging: `aws cloudtrail start-logging --name org-trail`
 
 ## Jumpstart Big Picture
 
