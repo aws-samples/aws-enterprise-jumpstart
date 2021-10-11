@@ -62,6 +62,13 @@ Resources:
           Statement:
           - Effect: Allow
             Action:
+            - cloudformation:*
+            Resource:
+            - arn:aws:cloudformation:*:aws:transform/Serverless*
+            - !Sub arn:aws:cloudformation:*:${AWS::AccountId}:stack/${ManagedResourcePrefix}*
+            - !Sub arn:aws:cloudformation:*:${AWS::AccountId}:changeSet/${ManagedResourcePrefix}*
+          - Effect: Allow
+            Action:
             - iam:*
             Resource:
             - !Sub arn:aws:iam::${AWS::AccountId}:role/CfnAdmin
