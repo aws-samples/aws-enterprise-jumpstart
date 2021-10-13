@@ -36,6 +36,8 @@ This repository holds one option to stand up a basic cloud foundation. It covers
 
 **If not exists applies to all steps**
 
+Use [CHECKLIST.md](CHECKLIST.md) to note down and document required information during the deployment process.
+
 ### Perform the following steps within the central organization management account
 
 1. Create AWS Organization and verify the email associated
