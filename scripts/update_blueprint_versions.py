@@ -38,7 +38,7 @@ with open(f"{BLUEPRINTS_KEY}/metadata.yaml", 'r') as stream:
     for name, blueprint in blueprints.items():
         product_id = ssm_client.get_parameter(Name=f"/blueprints/{name}/id")['Parameter']['Value']
         print(f"#### {name} - {product_id} ####")
-        __cleanup_versions(name, blueprint['versions'])
+        __cleanup_versions(name, blueprint['versions'], product_id)
         for version in blueprint['versions']:
             print(version)
             key = "{}/{}/{}.yaml".format(artifacts_bucket_prefix, name, version['name'])
