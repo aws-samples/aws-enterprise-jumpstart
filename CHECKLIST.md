@@ -1,22 +1,31 @@
 # Checklist
 
-Home Region:
-Governed Regions:
-Managed Resource Prefix:
+This document should be used while performing the installation steps of the Enterprise Jumpstart initial bootstrapping and installation. Once each setp is completed outputs such as the ids of AWS Organizations IDs, OU IDs, Account IDs, etc. should be filled into this sheet as it will be reused in subsequent steps as inputs. 
 
-Organization Id:
-Organization KMS Encryption Key Id:
+Global
+====
+Home Region: \
+Governed Regions: \
+Managed Resource Prefix: \
+Account Provisioning Notifications Email: 
 
-Core OU Id:
-Foundation OU Id:
-Dev OU Id:
+AWS Organizations Configuration
+===
+Organization Id: \
+Organization KMS Encryption Key Id: \
+Core OU Id: \
+Foundation OU Id: \
+Dev OU Id: 
 
-Management Account Id:
-Log Account Id:
-Log Account Email:
-Audit Account Id:
-Audit Account Email:
-Deployment Account Id:
-Deployment Account Email:
+AWS Accounts
+===
+Management Account Id: \
+Log Account Id: \
+Log Account Email: 
 
-Account Provisioning Notifications Email:
+Audit Account Id: \
+Audit Account Email: 
+
+Deployment Account Id: \
+Deployment Account Email: 
+
