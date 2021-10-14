@@ -1,17 +1,20 @@
 {
     "Statement": [
         {
-            "Sid": "Deny S3 PublicAccessBlock"
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Action": [
-                        "s3:PutAccountPublicAccessBlock"
-                    ],
-                    "Resource": "*",
-                    "Effect": "Deny"
+            "Sid": "DenyS3PublicAccessBlock",
+            "Effect": "Deny",
+            "Action": [
+                "s3:PutAccountPublicAccessBlock"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringNotLike": {
+                    "aws:PrincipalARN": [
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/organization-account-access-role/name}}",
+                        "arn:aws:iam::*:role/{{resolve:ssm:/org/deployment-account-access-role/name}}"
+                    ]
                 }
-            ]
+            }
         },
         {
             "Effect": "Deny",
