@@ -1,7 +1,7 @@
 {
   "Parameters": {
     "NotificationEmailAddress": "ops@mycompany.com",
-    "ManagedResourcePrefix": "ent-jumpstart",
+    "ManagedResourcePrefix": "ejs",
     "OrgRegions": "eu-west-1,us-east-1,ap-southeast-1",
     "OrganizationId": "o-1234567890",
     "OrganizationManagementAccountId": "999999999999",

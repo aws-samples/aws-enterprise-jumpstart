@@ -1,7 +1,7 @@
 {
   "Parameters": {
     "UseDedicatedDeploymentAccount": "true",
-    "ManagedResourcePrefix": "ent-jumpstart",
+    "ManagedResourcePrefix": "ejs",
     "RepositorySourceBranch": "main",
     "OrganizationManagementAccountId": "99999999999",
     "AuditAccountId": "99999999999",

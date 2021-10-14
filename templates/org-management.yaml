@@ -3,7 +3,7 @@ Description: Enterprise Jumpstart Organizations Payer Account Resources
 Parameters:
   ManagedResourcePrefix:
     Type: String
-    Default: ent-jumpstart
+    Default: ejs
   CoreOrganizationalUnit:
     Type: String
     Default: Core

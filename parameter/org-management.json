@@ -1,6 +1,6 @@
 {
   "Parameters": {
-    "ManagedResourcePrefix": "ent-jumpstart",
+    "ManagedResourcePrefix": "ejs",
     "CoreOrganizationalUnit": "Core",
     "FoundationOrganizationalUnit": "Foundation",
     "OrganizationId": "o-1234566",
