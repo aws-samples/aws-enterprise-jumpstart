@@ -102,6 +102,12 @@ Resources:
           ServerSideEncryptionByDefault:
             KMSMasterKeyID: !Ref KMSKey
             SSEAlgorithm: 'aws:kms'
+  ArtifactBucketNameParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /deployment/artifact-bucket/name
+      Value: !Ref ArtifactBucket
+      Type: String
   ArtifactBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
