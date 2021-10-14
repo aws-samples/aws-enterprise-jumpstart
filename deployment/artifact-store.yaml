@@ -2,7 +2,7 @@ Description: Artifact Store deployed in non home regions
 Parameters:
   ManagedResourcePrefix:
     Type: String
-    Default: ent-jumpstart
+    Default: ejs
   OrganizationManagementAccountId:
     Type: String
   KmsKeyArn:

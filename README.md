@@ -28,7 +28,7 @@ This repository holds one option to stand up a basic cloud foundation. It covers
 
 * Home region
 * Governed regions
-* Managed Resource Prefix (default `ent-jumpstart`)
+* Managed Resource Prefix (default `ejs`)
 * Email sub-domain, mail addresses for core accounts
 * Notification Mail Address
 

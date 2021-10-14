@@ -11,7 +11,7 @@ Parameters:
     Default: True
   ManagedResourcePrefix:
     Type: String
-    Default: ent-jumpstart
+    Default: ejs
   RepositorySourceBranch:
     Type: String
     Default: main
