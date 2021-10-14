@@ -890,14 +890,6 @@ Resources:
           Configuration:
             ProjectName:
               Ref: CodeBuildProjectBlueprints
-            EnvironmentVariables: >-
-              [
-                {
-                  "name": "dev",
-                  "value": "#{blueprints.DevProductId}",
-                  "type": "PLAINTEXT"
-                }
-              ]
           InputArtifacts:
           - Name: complete-sources
           RunOrder: 6

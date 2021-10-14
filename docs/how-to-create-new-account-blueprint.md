@@ -15,9 +15,8 @@
    1. Product itself with dummy version: `AWS::ServiceCatalog::CloudFormationProduct`
    2. Assignment to portfolio: `AWS::ServiceCatalog::PortfolioProductAssociation`
    3. Assign AWS Service Catalog Launch Role as launch constraint: `AWS::ServiceCatalog::LaunchRoleConstraint`
-   4. Add output to template with `!Ref` to new product as value
-6. Adapt `UpdateBlueprints` action environment variables `deployment/pipeline.yaml` to pass new product id
-   1. Update pipeline stack with new template
-7. Push changes to repository
+   4. SSM Parameter with product id as value: `AWS::SSM::Parameter`
+   5. Add output to template with `!Ref` to new product as value
+6. Push changes to repository
 
  
