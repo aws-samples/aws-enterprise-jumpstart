@@ -1,6 +1,6 @@
 # Checklist
 
-This document should be used while performing the installation steps of the Enterprise Jumpstart initial bootstrapping and installation. Once each setp is completed outputs such as the ids of AWS Organizations IDs, OU IDs, Account IDs, etc. should be filled into this sheet as it will be reused in subsequent steps as inputs. 
+This document should be used while performing the installation steps of the Enterprise Jumpstart initial bootstrapping and installation. Once each set is completed outputs such as the ids of AWS Organizations IDs, OU IDs, Account IDs, etc. should be filled into this sheet as it will be reused in subsequent steps as inputs. 
 
 Global
 ====
