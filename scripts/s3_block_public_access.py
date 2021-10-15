@@ -36,7 +36,7 @@ def lambda_handler(event, context):
         aws_session_token=credentials['SessionToken'],
     )
   
-    s3ctl_client = boto3.client('s3control', config=boto3_config)
+    s3ctl_client = session.client('s3control', config=boto3_config)
     response = s3ctl_client.put_public_access_block(
         AccountId=account_id,
         PublicAccessBlockConfiguration={
@@ -44,6 +44,6 @@ def lambda_handler(event, context):
             'IgnorePublicAcls': True,
             'BlockPublicPolicy': True,
             'RestrictPublicBuckets': True
-            }
+        }
     )
     logging.debug(json.dumps(response))
