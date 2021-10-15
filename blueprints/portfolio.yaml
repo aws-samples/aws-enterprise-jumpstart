@@ -18,6 +18,36 @@ Resources:
       PortfolioId: !Ref BlueprintPortfolio
       PrincipalARN: '{{resolve:ssm:/pipeline/codebuild/role}}'
       PrincipalType: IAM
+  Foundation:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties:
+      Description: AWS Foundation Account
+      Name: Foundation
+      Owner: !Ref ProviderName
+      ProvisioningArtifactParameters:
+      - Name: DUMMY
+        Description: Initial Version
+        Info:
+          LoadTemplateFromURL: https://aws-enterprise-jumpstart.s3.eu-west-1.amazonaws.com/account-blueprints/dummy.yaml
+  FoundationParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /blueprints/foundation/id
+      Value: !Ref Foundation
+      Type: String
+  FoundationPortfolioAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    Properties:
+      PortfolioId: !Ref BlueprintPortfolio
+      ProductId: !Ref Foundation
+  FoundationLaunchConstraint:
+    DependsOn: FoundationPortfolioFoundationAssociation
+    Type: AWS::ServiceCatalog::LaunchRoleConstraint
+    Properties:
+      Description: Foundation Account Launch Constraint
+      PortfolioId: !Ref BlueprintPortfolio
+      ProductId: !Ref Foundation
+      RoleArn: !GetAtt ServiceCatalogLaunchRole.Arn
   Dev:
     Type: AWS::ServiceCatalog::CloudFormationProduct
     Properties:
@@ -68,3 +98,5 @@ Outputs:
     Value: !Ref BlueprintPortfolio
   DevProductId:
     Value: !Ref Dev
+  FoundationProductId:
+    Value: !Ref Foundation
