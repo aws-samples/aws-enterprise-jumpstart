@@ -698,8 +698,8 @@ Resources:
             TemplatePath: complete-sources::templates/org-management.yaml
             TemplateConfiguration: complete-sources::parameter/org-management.json
           RunOrder: 1
-        - Name: AutomationBaseline
-          Namespace: automation
+        - Name: DeploymentBaseline
+          Namespace: deployment
           ActionTypeId:
             Category: Deploy
             Owner: AWS
@@ -719,7 +719,7 @@ Resources:
             - ${Prefix}-base
             - Prefix: !Ref ManagedResourcePrefix
             TemplatePath: stacks::build/packaged-template.yaml
-            TemplateConfiguration: complete-sources::parameter/automation.json
+            TemplateConfiguration: complete-sources::parameter/deployment.json
           RunOrder: 1
         - Name: BaselineScript
           ActionTypeId:
@@ -734,7 +734,7 @@ Resources:
               [
                 {
                   "name":"ORG_ACCOUNT_RESOURCE_TYPE_ARN",
-                  "value":"#{automation.OrganizationAccountResourceTypeArn}",
+                  "value":"#{deployment.OrganizationAccountResourceTypeArn}",
                   "type":"PLAINTEXT"
                 }
               ]
