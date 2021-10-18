@@ -29,7 +29,7 @@ Resources:
         Description: Initial Version
         Info:
           LoadTemplateFromURL: https://aws-enterprise-jumpstart.s3.eu-west-1.amazonaws.com/account-blueprints/dummy.yaml
-  FoundationParamter:
+  FoundationParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /blueprints/foundation/id
@@ -59,7 +59,7 @@ Resources:
         Description: Initial Version
         Info:
           LoadTemplateFromURL: https://aws-enterprise-jumpstart.s3.eu-west-1.amazonaws.com/account-blueprints/dummy.yaml
-  DevParamter:
+  DevParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /blueprints/dev/id
