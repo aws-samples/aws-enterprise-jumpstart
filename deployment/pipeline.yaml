@@ -660,6 +660,30 @@ Resources:
             RepositoryName: !Ref ManagedResourcePrefix
             PollForSourceChanges: false
           RunOrder: 1
+      - Name: DeployDeployment
+        Actions:
+        - Name: PipelineSelfUpdate
+          Namespace: pipeline
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-pipeline
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: complete-sources::deployment/pipeline.yaml
+            TemplateConfiguration: complete-sources::parameter/pipeline.json
+          RunOrder: 1
       - Name: Build
         Actions:
         - Name: Build
