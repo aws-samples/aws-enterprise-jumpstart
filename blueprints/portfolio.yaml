@@ -22,7 +22,7 @@ Resources:
     Type: AWS::ServiceCatalog::CloudFormationProduct
     Properties:
       Description: AWS Foundation Account
-      Name: Foundation
+      Name: foundation
       Owner: !Ref ProviderName
       ProvisioningArtifactParameters:
       - Name: DUMMY
