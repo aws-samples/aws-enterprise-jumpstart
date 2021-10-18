@@ -15,6 +15,12 @@ Parameters:
     Type: String
   OrganizationKmsKeyId:
     Type: String
+  StackInstancesCfnResourceVersion:
+    Description: 'Cloudformation Resource Provider Version - Type: ProServe::Cloudformation::StackInstances - https://github.com/aws-samples/aws-cloudformation-stack-instances'
+    Type: String
+  OrgAccountCfnResourceVersion:
+    Description: 'Cloudformation Resource Provider Version - Type: ProServe::Organizations::Account - https://github.com/aws-samples/aws-organizations-account-resource'
+    Type: String
 Conditions:
   DedicatedDeploymentAccount: !Not [!Equals [!Ref AWS::AccountId, !Ref OrganizationManagementAccountId]]
 Resources:
@@ -149,7 +155,7 @@ Resources:
     Type: AWS::CloudFormation::ResourceVersion
     Properties:
       ExecutionRoleArn: !GetAtt CfnStackInstancesExecutionRole.Arn
-      SchemaHandlerPackage: s3://aws-enterprise-jumpstart/aws-cloudformation-stack-instances/proserve-cloudformation-stackinstances-v1.0.1.zip
+      SchemaHandlerPackage: !Sub s3://aws-enterprise-jumpstart/aws-cloudformation-stack-instances/proserve-cloudformation-stackinstances-${StackInstancesCfnResourceVersion}.zip
       TypeName: ProServe::Cloudformation::StackInstances
       LoggingConfig:
           LogGroupName: !Ref CfnStacksetInstancesResourceLogGroup
@@ -200,7 +206,7 @@ Resources:
     Type: AWS::CloudFormation::ResourceVersion
     Properties:
       ExecutionRoleArn: !GetAtt CfnAccountResourceProviderExecutionRole.Arn
-      SchemaHandlerPackage: s3://aws-enterprise-jumpstart/aws-organizations-account-resource/proserve-organizations-account-v1.0.7.zip
+      SchemaHandlerPackage: !Sub s3://aws-enterprise-jumpstart/aws-organizations-account-resource/proserve-organizations-account-${OrgAccountCfnResourceVersion}.zip
       TypeName: ProServe::Organizations::Account
       LoggingConfig:
         LogGroupName: !Ref CfnAccountResourceLogGroup
