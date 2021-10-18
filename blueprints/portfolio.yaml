@@ -41,7 +41,7 @@ Resources:
       PortfolioId: !Ref BlueprintPortfolio
       ProductId: !Ref Foundation
   FoundationLaunchConstraint:
-    DependsOn: FoundationPortfolioFoundationAssociation
+    DependsOn: FoundationPortfolioAssociation
     Type: AWS::ServiceCatalog::LaunchRoleConstraint
     Properties:
       Description: Foundation Account Launch Constraint
