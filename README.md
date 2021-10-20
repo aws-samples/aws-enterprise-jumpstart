@@ -1,23 +1,22 @@
-# AWS Enterprise Customer Jumpstart
+# AWS Enterprise Jumpstart
 
-Enterprise Jumpstart goes beyond multi-account strategy. It gives prescriptive guidance on critical topics part of enterprise cloud foundations.
-From our experience cloud foundations can get very complex and there are lots of options going forward.
+Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of customer cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
 
-This repository holds one option to stand up a basic cloud foundation. It covers the following topics:
+## Features
 
-* Baseline Security via AWS Organizations
-  * Service Control Policies
-  * Centralized Logging and Monitoring (AWS Config, AWS CloudTrail)
-* Automated Account Provisioning via AWS Service Catalog and AWS Organizations
-  * Proper Versioning & Staging of multiple Account Blueprints
-  * Bulk upgrade of Accounts on Organizational Unit Level
+* Curated preventive guardrails via AWS Organizations Service Control Policies
+* Central logging via AWS Cloudtrail, AWS Config and AWS Organizations
+* Encryption at rest via AWS Key Management Service
+* 
 
-## Tenants - Unless you now better ones
+## Tenets - Unless you now better ones
 
 * Security
 * Simplicity
 * Transparency & Flexibility
 * Scalability
+
+See details on tenets & our vision in (docs/tenets-and-vision.md)[docs/tenets-and-vision.md]
 
 ## Pre-requisites
 
