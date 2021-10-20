@@ -1,4 +1,4 @@
-# AWS Enterprise Jumpstart
+# AWS Enterprise Jumpstart (EJS)
 
 Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise multi-account cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of customer cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
 
@@ -45,7 +45,7 @@ See details on tenets & our vision in (docs/tenets-and-vision.md)[docs/tenets-an
 * Home region
 * Governed regions
 * Managed Resource Prefix (default `ejs`)
-* Email sub-domain, mail addresses for core accounts
+* Email sub-domain, plus-notation, mail addresses for core accounts
 * Notification Mail Address
 
 ## Jumpstart Deployment Steps
@@ -96,6 +96,12 @@ The following AWS Cloudformation Resource Providers are used within Enterprise J
 
 * ProServe::Cloudformation::StackInstances - https://github.com/aws-samples/aws-organizations-account-resource.
 * ProServe::Organizations::Account- https://github.com/aws-samples/aws-cloudformation-stack-instances
+
+## AWS Config Suggestions
+
+Add AWS Config Rules to AWS Config Baseline Stackset to cover all accound provisioned via EJS. Create new StackSet for OU bound config rule set for organziational unit (OU) level rules.
+
+See curated list of AWS Config Rules here: https://github.com/awslabs/aws-config-rules/blob/master/aws-config-conformance-packs/AWS-Control-Tower-Detective-Guardrails.yaml
 
 ## Security
 
