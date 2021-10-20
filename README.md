@@ -1,13 +1,30 @@
 # AWS Enterprise Jumpstart
 
-Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of customer cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
+Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise multi-account cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of customer cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
 
 ## Features
 
 * Curated preventive guardrails via AWS Organizations Service Control Policies
 * Central logging via AWS Cloudtrail, AWS Config and AWS Organizations
 * Encryption at rest via AWS Key Management Service
-* 
+* Modular codebase with no additional upstream project codebase to maintain
+* Concurrent AWS Account Provisioning via AWS Service Catalog and AWS Cloudformation
+    * Blueprinting
+    * Versioning
+    * Staging and bulk upgrades
+    * Alerting of provisioning failures via AWS Simple Notification Service (SNS)
+* Customer preventive and detective gu
+* AWS Cloudformation Infrastructure as Code support
+    * Custom preventive (Service Control Policies) guardrails on organizational unit level
+    * Custom detective (AWS Config) guardrails on organizational unit level
+    * Account level tags
+* Transparent troubleshooting simplified via AWS Cloudformation Event Log and AWS Cloudwatch Logs
+
+### Future Plans
+
+* Automated deployment & merge of upstream improvements with Enterprise Jumpstart
+* AWS Cloudformation support for AWS Alternate Account Contacts via AWS Service Catalog Account Provisioning
+* Enhanced monitoring
 
 ## Tenets - Unless you now better ones
 
@@ -71,9 +88,14 @@ Use [CHECKLIST.md](CHECKLIST.md) to note down and document required information 
 
 ![jumpstart-deployment-diagram](docs/jumpstart-deployment.png)
 
-## Account Vending Usage and Documentation
+## Account Provisioning Usage and Documentation
 
-See blueprints, how-to in [docs/](docs) and https://github.com/aws-samples/aws-organizations-account-resource.
+See blueprints, how-to in [docs/](docs)
+
+The following AWS Cloudformation Resource Providers are used within Enterprise Jumpstart
+
+* ProServe::Cloudformation::StackInstances - https://github.com/aws-samples/aws-organizations-account-resource.
+* ProServe::Organizations::Account- https://github.com/aws-samples/aws-cloudformation-stack-instances
 
 ## Security
 
