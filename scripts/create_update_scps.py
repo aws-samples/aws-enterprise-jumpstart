@@ -85,13 +85,14 @@ with open("scps/metadata.yaml", 'r') as stream:
                     )
 
                 print("ATTACH_OR_RE-ATTACH_SCP")
-                try:
-                    org_client.attach_policy(
-                        PolicyId=_scp['Id'],
-                        TargetId=scp['organizational-unit-id']
-                    )
-                except org_client.exceptions.DuplicatePolicyAttachmentException as e:
-                    print(f"SCP {_name} ({_scp['Id']}) already attached to OU ({scp['organizational-unit-id']}).")
+                for ou in scp['organizational-units']:
+                    try:
+                        org_client.attach_policy(
+                            PolicyId=_scp['Id'],
+                            TargetId=ou
+                        )
+                    except org_client.exceptions.DuplicatePolicyAttachmentException as e:
+                        print(f"SCP {_name} ({_scp['Id']}) already attached to OU ({ou}).")
         except Exception as e:
             print(str(e))
             print(traceback.format_exc())

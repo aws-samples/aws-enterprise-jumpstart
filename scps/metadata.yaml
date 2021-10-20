@@ -2,11 +2,14 @@
 ##### SCPs are never detached automatically #####
 scps:
   core:
-    organizational-unit-id: ou-abcd-12345678
+    organizational-units:
+    - ou-abcd-12345678
     description: core baseline
   dev:
-    organizational-unit-id: ou-abcd-12345678
+    organizational-units:
+    - ou-abcd-12345678
     description: dev baseline
   foundation:
-    organizational-unit-id: ou-abcd-12345678
+    organizational-units:
+    - ou-abcd-12345678
     description: foundation baseline
