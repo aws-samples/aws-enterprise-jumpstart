@@ -1,6 +1,6 @@
 # AWS Enterprise Jumpstart (EJS)
 
-Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise multi-account cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of customer cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
+Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise multi-account cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of an enterprise cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
 
 ## Features
 
@@ -13,18 +13,22 @@ Enterprise Jumpstart is a cloud foundation/landing-zone framework with transpare
     * Versioning
     * Staging and bulk upgrades
     * Alerting of provisioning failures via AWS Simple Notification Service (SNS)
-* Customer preventive and detective gu
+* Custom preventive and detective guardrails
 * AWS Cloudformation Infrastructure as Code support
-    * Custom preventive (Service Control Policies) guardrails on organizational unit level
-    * Custom detective (AWS Config) guardrails on organizational unit level
+    * Preventive (Service Control Policies) guardrails on organizational unit level
+    * Detective (AWS Config) guardrails on organizational unit level
     * Account level tags
 * Transparent troubleshooting simplified via AWS Cloudformation Event Log and AWS Cloudwatch Logs
 
 ### Future Plans
 
 * Automated deployment & merge of upstream improvements with Enterprise Jumpstart
-* AWS Cloudformation support for AWS Alternate Account Contacts via AWS Service Catalog Account Provisioning
+* Additional AWS Cloudformation support
+    * AWS Alternate Account Contacts via AWS Service Catalog Account Blueprints
 * Enhanced monitoring
+* Additional Cloudformation Baseline Stacksets
+    * Curated Config Rules
+    * AWS Systems Manager Parameters
 
 ## Tenets - Unless you now better ones
 
@@ -99,7 +103,7 @@ The following AWS Cloudformation Resource Providers are used within Enterprise J
 
 ## AWS Config Suggestions
 
-Add AWS Config Rules to AWS Config Baseline Stackset to cover all accound provisioned via EJS. Create new StackSet for OU bound config rule set for organziational unit (OU) level rules.
+Add AWS Config Rules to AWS Config Baseline Stackset to cover all accounts provisioned via EJS. Create new StackSet for OU bound config rule set for organziational unit (OU) level rules.
 
 See curated list of AWS Config Rules here: https://github.com/awslabs/aws-config-rules/blob/master/aws-config-conformance-packs/AWS-Control-Tower-Detective-Guardrails.yaml
 
