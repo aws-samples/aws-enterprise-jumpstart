@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enterprise Jumpstart Systems Manager Parameter Baseline
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+  OrgRegions:
+    Type: List<String>
+  OrganizationId:
+    Type: String
+  DeploymentAccountAccessRoleName:
+    Type: String
+  OrganizationManagementAccountId:
+    Type: String
+  NetworkAccountId:
+    Type: String
+  TransitGatewayFrankfurtId:
+    Type: String
+  TransitgatewayDevRouteTableFrankfurtId:
+    Type: String
+  TransitgatewayRoutingAutomationTopic:
+    Type: String
+  DraegerDomain:
+    Type: String
+  ProviderName:
+    Type: String
+  # TransitGatewayNorthVirginiaId:
+  #   Type: String
+
+Resources:
+  OrganizationIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/id
+      Value: !Ref OrganizationId
+      Type: String
+  OrganziationManagementAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/management-account/id
+      Value: !Ref OrganizationManagementAccountId
+      Type: String
+  DeploymentAccountAccessRoleNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/deployment-account-access-role/name
+      Value: !Ref DeploymentAccountAccessRoleName
+      Type: String
+  NetworkAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/network-account/id
+      Value: !Ref NetworkAccountId
+      Type: String
+  ManagedResourcePrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/prefix
+      Value: !Ref ManagedResourcePrefix
+      Type: String
+  OrgRegionsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/regions
+      Value: !Join [',', !Ref OrgRegions]
+      Type: StringList
+  TransitgatewayFrankfurtIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/network/eu-central-1/tgw-id
+      Value: !Ref TransitGatewayFrankfurtId
+      Type: String
+  TransitgatewayDevRouteTableFrankfurtIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/network/eu-central-1/route-table/dev
+      Value: !Ref TransitgatewayDevRouteTableFrankfurtId
+      Type: String
+  TransitgatewayRoutingAutomationTopicParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/network/tgw-routing-automation/topic-name
+      Value: !Ref TransitgatewayRoutingAutomationTopic
+      Type: String
+  DraegerDomainParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/network/domain
+      Value: !Ref DraegerDomain
+      Type: String
+  ProviderNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/provider-name
+      Value: !Ref ProviderName
+      Type: String
+  # TransitgatewayIdParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Name: /org/network/us-east-1/tgw-id
+  #     Value: !Ref TransitGatewayNorthVirginiaId
+  #     Type: String
