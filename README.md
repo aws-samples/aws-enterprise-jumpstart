@@ -37,7 +37,7 @@ Enterprise Jumpstart is a cloud foundation/landing-zone framework with transpare
 * Transparency & Flexibility
 * Scalability
 
-See details on tenets & our vision in (docs/tenets-and-vision.md)[docs/tenets-and-vision.md]
+See details on tenets & our vision in [docs/tenets-and-vision.md](docs/tenets-and-vision.md)
 
 ## Pre-requisites
 
