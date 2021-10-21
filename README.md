@@ -27,8 +27,8 @@ Enterprise Jumpstart is a cloud foundation/landing-zone framework with transpare
     * AWS Alternate Account Contacts via AWS Service Catalog Account Blueprints
 * Enhanced monitoring
 * Additional Cloudformation Baseline Stacksets
-    * Curated Config Rules
-    * AWS Systems Manager Parameters
+    * Curated Config Rules - ([#11](https://github.com/aws-samples/aws-enterprise-jumpstart/pull/11))
+    * AWS Systems Manager Parameters  - ([#12](https://github.com/aws-samples/aws-enterprise-jumpstart/pull/12))
 
 ## Tenets - Unless you now better ones
 
