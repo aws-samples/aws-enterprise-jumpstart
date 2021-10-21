@@ -1,23 +1,43 @@
-# AWS Enterprise Customer Jumpstart
+# AWS Enterprise Jumpstart (EJS)
 
-Enterprise Jumpstart goes beyond multi-account strategy. It gives prescriptive guidance on critical topics part of enterprise cloud foundations.
-From our experience cloud foundations can get very complex and there are lots of options going forward.
+Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise multi-account cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of an enterprise cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
 
-This repository holds one option to stand up a basic cloud foundation. It covers the following topics:
+## Features
 
-* Baseline Security via AWS Organizations
-  * Service Control Policies
-  * Centralized Logging and Monitoring (AWS Config, AWS CloudTrail)
-* Automated Account Provisioning via AWS Service Catalog and AWS Organizations
-  * Proper Versioning & Staging of multiple Account Blueprints
-  * Bulk upgrade of Accounts on Organizational Unit Level
+* Curated preventive guardrails via AWS Organizations Service Control Policies
+* Central logging via AWS Cloudtrail, AWS Config and AWS Organizations
+* Encryption at rest via AWS Key Management Service
+* Modular codebase with no additional upstream project codebase to maintain
+* Concurrent AWS Account Provisioning via AWS Service Catalog and AWS Cloudformation
+    * Blueprinting
+    * Versioning
+    * Staging and bulk upgrades
+    * Alerting of provisioning failures via AWS Simple Notification Service (SNS)
+* Custom preventive and detective guardrails
+* AWS Cloudformation Infrastructure as Code support
+    * Preventive (Service Control Policies) guardrails on organizational unit level
+    * Detective (AWS Config) guardrails on organizational unit level
+    * Account level tags
+* Transparent troubleshooting simplified via AWS Cloudformation Event Log and AWS Cloudwatch Logs
 
-## Tenants - Unless you now better ones
+### Future Plans
+
+* Automated deployment & merge of upstream improvements with Enterprise Jumpstart
+* Additional AWS Cloudformation support
+    * AWS Alternate Account Contacts via AWS Service Catalog Account Blueprints
+* Enhanced monitoring
+* Additional Cloudformation Baseline Stacksets
+    * Curated Config Rules
+    * AWS Systems Manager Parameters
+
+## Tenets - Unless you now better ones
 
 * Security
 * Simplicity
 * Transparency & Flexibility
 * Scalability
+
+See details on tenets & our vision in (docs/tenets-and-vision.md)[docs/tenets-and-vision.md]
 
 ## Pre-requisites
 
@@ -29,7 +49,7 @@ This repository holds one option to stand up a basic cloud foundation. It covers
 * Home region
 * Governed regions
 * Managed Resource Prefix (default `ejs`)
-* Email sub-domain, mail addresses for core accounts
+* Email sub-domain, plus-notation, mail addresses for core accounts
 * Notification Mail Address
 
 ## Jumpstart Deployment Steps
@@ -72,9 +92,20 @@ Use [CHECKLIST.md](CHECKLIST.md) to note down and document required information 
 
 ![jumpstart-deployment-diagram](docs/jumpstart-deployment.png)
 
-## Account Vending Usage and Documentation
+## Account Provisioning Usage and Documentation
 
-See blueprints, how-to in [docs/](docs) and https://github.com/aws-samples/aws-organizations-account-resource.
+See blueprints, how-to in [docs/](docs)
+
+The following AWS Cloudformation Resource Providers are used within Enterprise Jumpstart
+
+* ProServe::Cloudformation::StackInstances - https://github.com/aws-samples/aws-organizations-account-resource.
+* ProServe::Organizations::Account- https://github.com/aws-samples/aws-cloudformation-stack-instances
+
+## AWS Config Suggestions
+
+Add AWS Config Rules to AWS Config Baseline Stackset to cover all accounts provisioned via EJS. Create new StackSet for OU bound config rule set for organziational unit (OU) level rules.
+
+See curated list of AWS Config Rules here: https://github.com/awslabs/aws-config-rules/blob/master/aws-config-conformance-packs/AWS-Control-Tower-Detective-Guardrails.yaml
 
 ## Security
 
