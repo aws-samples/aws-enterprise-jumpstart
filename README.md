@@ -69,7 +69,7 @@ Use [CHECKLIST.md](CHECKLIST.md) to note down and document required information 
    * `aws organizations enable-aws-service-access --service-principal cloudtrail.amazonaws.com`
 5. Create dedicated deployment account via AWS organization
 6. Move the created deployment account into the Foundation OU
-7. Deploy the AWS CloudFormation stack `templates/org-management.yaml` with appropriate parameters, with stack name <ejs-prefix>-base
+7. Deploy the AWS CloudFormation stack `templates/org-management.yaml` with appropriate parameters, with stack name {ejs-prefix}-base
 
 ### Perform the following steps within the newly created deployment account:
 
