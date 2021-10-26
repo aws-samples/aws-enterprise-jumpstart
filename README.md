@@ -77,7 +77,7 @@ Use [CHECKLIST.md](CHECKLIST.md) to note down and document required information 
 2. Deploy the AWS CloudFormation stack `deployment/pipeline.yaml` with appropriate parameters in the _home_ region
 3. Leave Parameter for audit and log account Ids temporary **empty**
 4. Walk through all files within `parameter` folder and adapt values (except for strings containing two slash as in orgs)
-5. Adopt `scps/metadata.yaml` with correct OU ids
+5. Adopt `metadata.yaml` with correct OU ids
 6. Push code to AWS CodeCommit and wait for pipeline succeed
 7. Delegate Config Administrator to the Audit Account (to be executed in AWS Organization Account)
    * `aws organizations register-delegated-administrator --account-id 999999999999 --service-principal config-multiaccountsetup.amazonaws.com`

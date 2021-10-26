@@ -44,7 +44,7 @@ session = boto3.Session(
 )
 org_client = session.client("organizations", region_name='us-east-1', config=boto3_config)
 
-with open("scps/metadata.yaml", 'r') as stream:
+with open("metadata.yaml", 'r') as stream:
     scps = yaml.safe_load(stream)[SCPS_KEY]
     for name, scp in scps.items():
         try:

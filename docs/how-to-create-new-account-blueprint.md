@@ -10,7 +10,7 @@
 1. Make decision on name of new blueprint, e.g. `sandbox` 
 2. Create new file with scheme `<name>.yaml` within `blueprints` folder similar to existing blueprints
 3. Add required AWS CloudFormation resources to initial version
-4. Add new blueprint to `blueprints/metadata.yaml` file with initial version
+4. Add new blueprint to `metadata.yaml` file with initial version
 5. Create a new product resource within `blueprints/portfolio.yaml` template
    1. Product itself with dummy version: `AWS::ServiceCatalog::CloudFormationProduct`
    2. Assignment to portfolio: `AWS::ServiceCatalog::PortfolioProductAssociation`

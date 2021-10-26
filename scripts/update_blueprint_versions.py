@@ -33,7 +33,7 @@ def __cleanup_versions(_name, _versions, _product_id):
             )
 
 
-with open(f"{BLUEPRINTS_KEY}/metadata.yaml", 'r') as stream:
+with open("metadata.yaml", 'r') as stream:
     blueprints = yaml.safe_load(stream)[BLUEPRINTS_KEY]
     for name, blueprint in blueprints.items():
         product_id = ssm_client.get_parameter(Name=f"/blueprints/{name}/id")['Parameter']['Value']

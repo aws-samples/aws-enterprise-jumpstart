@@ -2,7 +2,7 @@
 
 ## Walk-Through
 1. Adapt blueprint Cloudformation template
-2. Add new work in progress version to `blueprints/metadata.yaml`
+2. Add new work in progress version to `metadata.yaml`
 3. Push changes, wait for pipeline so succeed
 4. Test new version by upgrading existing non-production account to new version
 5. Once all required updates are done, use new version to deploy new accounts

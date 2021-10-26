@@ -1,9 +1,0 @@
-blueprints:
-  dev:
-    versions:
-    - name: v1.0.0
-      description: initial version
-  foundation:
-    versions:
-    - name: v1.0.0
-      description: initial version
