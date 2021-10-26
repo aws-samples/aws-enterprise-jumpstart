@@ -8,7 +8,7 @@ blueprints:
     - name: v1.0.0
       description: initial version
 ##### CHANGE OF SCP NAME AND/OR OU ID WILL CREATE AND/OR ATTACH A NEW SCP #####
-##### SCPs are never detached automatically #####
+##### SCPs are never detached/deleted automatically #####
 scps:
   core:
     organizational-units:
