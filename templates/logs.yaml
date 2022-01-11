@@ -16,10 +16,12 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub 'config-log-archive-${OrganizationId}'
+      VersioningConfiguration:
+        Status: Enabled
       BucketEncryption:
-          ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
   ConfigLogBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -74,6 +76,8 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub 'cloudtrail-log-archive-${OrganizationId}'
+      VersioningConfiguration:
+        Status: Enabled
       BucketEncryption:
         ServerSideEncryptionConfiguration:
         - ServerSideEncryptionByDefault:
