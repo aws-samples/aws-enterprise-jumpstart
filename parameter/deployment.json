@@ -6,7 +6,7 @@
     "OrganizationId": "o-1234567890",
     "OrganizationManagementAccountId": "999999999999",
     "OrganizationKmsKeyId": "12345678-123123",
-    "StackInstancesCfnResourceVersion": "v1.1.0",
-    "OrgAccountCfnResourceVersion": "v1.1.0"
+    "StackInstancesCfnResourceVersion": "v1.1.1",
+    "OrgAccountCfnResourceVersion": "v1.1.1"
   }
 }
