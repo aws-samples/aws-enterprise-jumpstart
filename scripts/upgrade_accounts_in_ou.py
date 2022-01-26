@@ -48,11 +48,34 @@ provisioned_products = __search_provisioned_products(product_id)
 for pp in provisioned_products:
     try:
         logging.info(f"Account: {pp['Name']}")
-        provisioning_parameters = sc_client.describe_provisioning_parameters(
-            ProductId=product_id,
-            ProvisioningArtifactId=pp['ProvisioningArtifactId'],
-            PathName=LAUNCH_PATH_NAME
-        )['ProvisioningArtifactParameters']
+        record_detail = sc_client.describe_record(
+            Id=pp['LastRecordId']
+        )['RecordDetail']
+        try:
+            pa_detail = sc_client.describe_provisioning_artifact(
+                ProductId=product_id,
+                ProvisioningArtifactId=record_detail['ProvisioningArtifactId']
+            )['ProvisioningArtifactDetail']
+            if 'dummy' in pa_detail['Name'].lower():
+                logging.info('is dummy account, skip upgrade')
+                continue
+
+        except sc_client.exceptions.ResourceNotFoundException as not_found_e:
+            logging.info(f"provisioning artifact {record_detail['ProvisioningArtifactId']} not found, cannot be dummy")
+
+        try:
+            provisioning_parameters = sc_client.describe_provisioning_parameters(
+                ProductId=product_id,
+                ProvisioningArtifactId=pp['ProvisioningArtifactId'],
+                PathName=LAUNCH_PATH_NAME
+            )['ProvisioningArtifactParameters']
+        except sc_client.exceptions.ResourceNotFoundException as not_found_e:
+            provisioning_parameters = sc_client.describe_provisioning_parameters(
+                ProductId=product_id,
+                ProvisioningArtifactName=provisioning_artifact_name,
+                PathName=LAUNCH_PATH_NAME
+            )['ProvisioningArtifactParameters']
+
         logging.debug(provisioning_parameters)
         update_parameters = list(map(lambda p: {'Key': p['ParameterKey'], 'Value': '', 'UsePreviousValue': True}, provisioning_parameters))
         logging.debug(update_parameters)
