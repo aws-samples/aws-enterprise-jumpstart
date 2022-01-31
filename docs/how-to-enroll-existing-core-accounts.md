@@ -4,22 +4,14 @@ This guide is intended to help enrolling existing audit and log accounts. This i
 
 
 ## Walk-through
-1. Note down AWS Account Id and Email of your Audit and 
-4. Navigate to AWS Cloudformation console and the stack created by step 3.
-5. Navigate to Create Stack -> With existing resources
-6. Choose to upload a template and pick file `/templates/core-accounts-import.yaml` from your disk, click next
-7. Give the stack the following name `<ejs-prefix>--core-accounts`
-8. Paste the account ids of the existing accounts you like to import and proceed with importing
-9. Wait for the Cloudformation stack shows import complete. For troubleshooting see Cloudformation event error messages and check AWS Cloudwatch log group `Proserve-Organizations-Account`.
-10. Navigate to AWS Cloudformation console and the stack created in the last steps
-11. Cick Update and choose to upload new template, upload `templates/core-accounts.yaml`
-12. Wait for update complete status
-13. Run Enterprise Jumpstart main pipeline
+AWS CloudFormation will automatically incorporate the existing account and read the required metadata via AWS API. It will apply tags as defined in CloudFormation and move the account into the choosen organizational unit within AWS Organizations.
+
+That said, you can adapt the account information in [/parameter/core-accounts.json](/parameter/core-accounts.json) and rerun the EJS main pipeline. This will incorporate the accounts if email and name matches.
 
 ## Hints
 
-Before actually importing the resource, Cloudformation will perform a read operation on the resource. This ensures the acccount exists.
+Cloudformation will perform a read operation on the resource. This ensures the acccount exists and matches name and email.
 
-Any failure with important has **no** impact to the account itself. There is no resource touched within the account in this process. The `DeploymentAccountConfiguration` property is only respected on creation, the role has to be created manually if you import the account.
+Any failure with important has **no** impact to the account itself. There is no resource touched within the account in this process. The `DeploymentAccountConfiguration` property is only respected on creation, but it will not override existing configurations.
 
-The deletion policy `retain` ensures the account is not moved to root OU on failure of import.
+The account is moved to root OU on failure of enrollment.
