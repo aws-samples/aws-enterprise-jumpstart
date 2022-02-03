@@ -7,6 +7,6 @@
     "OrganizationManagementAccountId": "999999999999",
     "OrganizationKmsKeyId": "12345678-123123",
     "StackInstancesCfnResourceVersion": "v1.1.1",
-    "OrgAccountCfnResourceVersion": "v1.1.1"
+    "OrgAccountCfnResourceVersion": "v1.2.3"
   }
 }
