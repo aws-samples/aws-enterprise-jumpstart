@@ -91,6 +91,8 @@ Resources:
       Parameters:
       - ParameterKey: ManagedResourcePrefix
         ParameterValue: '{{resolve:ssm:/org/prefix}}'
+      - ParameterKey: LogKmsKeyArn
+        ParameterValue: !Sub 'arn:aws:kms:${AWS::Region}:{{resolve:ssm:/org/management-account/id}}:key/{{resolve:ssm:/org/management-account/kms-id}}'
       PermissionModel: SELF_MANAGED
       AdministrationRoleARN: !GetAtt StacksetAdminRole.Arn
       ExecutionRoleName: '{{resolve:ssm:/org/deployment-account-access-role/name}}'

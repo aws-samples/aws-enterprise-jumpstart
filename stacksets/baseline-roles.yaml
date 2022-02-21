@@ -5,6 +5,9 @@ Parameters:
   ManagedResourcePrefix:
     Type: 'String'
     Description: 'Prefix for the managed resources'
+  LogKmsKeyArn:
+    Type: 'String'
+    Description: KMS Key Arn of the central logging data.
 
 Resources:
   ConfigRecorderRole:
@@ -40,4 +43,4 @@ Resources:
             - kms:ReEncrypt*
             - kms:GenerateDataKey
             - kms:GenerateDataKeyWithoutPlaintext
-            Resource: '*'
+            Resource: !Ref LogKmsKeyArn
