@@ -168,7 +168,8 @@
             ],
             "Resource": [
                 "arn:*:cloudformation:*:*:stack/StackSet-*",
-                "arn:*:cloudformation:*:*:stack/{{resolve:ssm:/org/prefix}}*"
+                "arn:*:cloudformation:*:*:stack/{{resolve:ssm:/org/prefix}}-audit",
+                "arn:*:cloudformation:*:*:stack/{{resolve:ssm:/org/prefix}}-log"
             ],
             "Condition": {
                 "StringNotLike": {
