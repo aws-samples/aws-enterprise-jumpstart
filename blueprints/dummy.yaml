@@ -66,7 +66,7 @@ Parameters:
     Type: String
   
 Resources:
-  DummyParamter:
+  DummyParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: !Sub /account/${AccountName}
@@ -76,3 +76,4 @@ Resources:
 Outputs:
   AccountName:
     Value: !Ref AccountName
+
