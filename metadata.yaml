@@ -7,18 +7,18 @@ blueprints:
     versions:
     - name: v1.0.0
       description: initial version
-##### CHANGE OF SCP NAME AND/OR OU ID WILL CREATE AND/OR ATTACH A NEW SCP #####
+##### CHANGE OF SCP NAME AND/OR OU/Account ID WILL CREATE AND/OR ATTACH A NEW SCP #####
 ##### SCPs are never detached/deleted automatically #####
 scps:
   core:
-    organizational-units:
+    targets:
     - ou-abcd-12345678
     description: core baseline
   dev:
-    organizational-units:
+    targets:
     - ou-abcd-12345678
     description: dev baseline
   foundation:
-    organizational-units:
+    targets:
     - ou-abcd-12345678
     description: foundation baseline
