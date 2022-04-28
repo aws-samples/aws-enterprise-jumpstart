@@ -3,12 +3,12 @@ Description: EJS SSPM Artifact Store(s) deployed in non home regions
 Mappings:
   Config:
     Service:
-      Name: ejs-sspm-sc
-      ArtifactBucketName: ejs-sspm-sc-store
+      Name: ejs-sc
+      ArtifactBucketName: ejs-sc-store
 Parameters:
   ManagedResourcePrefix:
     Type: String
-    Default: ejs-sspm
+    Default: ejs-sc
   KmsKeyArn:
     Type: String
 Resources:

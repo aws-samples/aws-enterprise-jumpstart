@@ -1,6 +1,6 @@
 {
   "Parameters": {
-    "ManagedResourcePrefix": "ejs-sspm",
+    "ManagedResourcePrefix": "ejs-sc",
     "InstanceArn": "",
     "IdentityStoreId": ""
   }

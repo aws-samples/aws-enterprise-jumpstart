@@ -4,7 +4,7 @@ Description: EJS Pipeline for Self Service Permission Set Management
 Parameters:
   ManagedResourcePrefix:
     Type: String
-    Default: ejs-sspm
+    Default: ejs-sc
   RepositorySourceBranch:
     Type: String
     Default: main
