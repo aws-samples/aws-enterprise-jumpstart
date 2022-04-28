@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Sample Product
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: ""
+
+Conditions:
+  BucketNameEmpty: !Equals [!Ref BucketName, ""]
+
+Resources:
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !If [BucketNameEmpty, !Ref AWS::NoValue, !Ref BucketName]
+
+Outputs: 
+  BucketName:
+    Value: !Ref S3Bucket

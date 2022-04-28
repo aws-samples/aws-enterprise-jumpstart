@@ -1,0 +1,9 @@
+{
+  "Parameters": {
+    "Identifier": "egress-vpc",
+    "PrivateSubnetCidr": "10.1.1.0/24",
+    "PublicSubnetCidr": "10.1.2.0/24",
+    "PrivateSubnetPrefixLength": "26",
+    "PublicSubnetPrefixLength": "26"
+  }
+}

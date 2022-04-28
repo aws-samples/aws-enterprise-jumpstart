@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ejs-security",
+    "RepositorySourceBranch": "main",
+    "AdditionalRegions": "us-east-1"
+  }
+}

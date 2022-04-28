@@ -1,0 +1,661 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EJS Pipeline for Self Service Permission Set Management
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-sspm
+  RepositorySourceBranch:
+    Type: String
+    Default: main
+  AdditionalRegions:
+    Type: String
+#  OrganizationManagementAccountId:
+#    Type: String
+#  AuditAccountId:
+#    Type: String
+#  LogsAccountId:
+#    Type: String
+#  DeploymentAccountId:
+#    Type: String
+
+Resources:
+  # CodeCommitUser:
+  #   Type: AWS::IAM::User
+  #   Properties:
+  #     ManagedPolicyArns:
+  #     - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
+  #     UserName: CodeCommitUser
+  EjsSSPMRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryDescription: AWS Enterprise Jumpstart AWS Self Service Permission Set Management Assets and Code
+      RepositoryName: !Ref ManagedResourcePrefix
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Encrypt/Decrypt EJS SSPM Assests
+      EnableKeyRotation: true
+      MultiRegion: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: !Ref AWS::StackName
+        Statement:
+        - Sid: Allows admin of the key
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - "kms:Create*"
+          - "kms:Describe*"
+          - "kms:Enable*"
+          - "kms:List*"
+          - "kms:Put*"
+          - "kms:Update*"
+          - "kms:Revoke*"
+          - "kms:Disable*"
+          - "kms:Get*"
+          - "kms:Delete*"
+          - "kms:ScheduleKeyDeletion"
+          - "kms:CancelKeyDeletion"
+          - "kms:ReplicateKey"
+          Resource: "*"
+        - Sid: Allow use of the key for Audit/Logs account
+          Effect: Allow
+          Principal:
+            AWS:
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+            - 'arn:aws:iam::{{resolve:ssm:/org/management-account/id}}:root'
+            - "*"
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:DescribeKey
+          Resource: "*"
+          Condition:
+            StringLike:
+              aws:PrincipalOrgID: '{{resolve:ssm:/org/id}}'
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${ManagedResourcePrefix}-codepipeline
+      TargetKeyId: !Ref KMSKey
+  ArtifactBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            KMSMasterKeyID: !Ref KMSKey
+            SSEAlgorithm: 'aws:kms'
+  ArtifactBucketNameParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /sso-sspm/artifact-bucket/name
+      Value: !Ref ArtifactBucket
+      Type: String
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - 's3:GetObject'
+          Effect: Allow
+          Resource: !Join
+          - ''
+          - - 'arn:aws:s3:::'
+            - !Ref ArtifactBucket
+            - /*
+          Principal:
+            AWS:
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+            - 'arn:aws:iam::{{resolve:ssm:/org/management-account/id}}:root'
+        - Action:
+          - s3:GetObject
+          Effect: Allow
+          Resource: !Join
+          - ''
+          - - 'arn:aws:s3:::'
+            - !Ref ArtifactBucket
+            - /sc-assets/*
+          Principal:
+            AWS: "*"
+          Condition:
+            StringLike:
+              aws:PrincipalOrgID: '{{resolve:ssm:/org/id}}'
+  BucketAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Allow usage of custom resource
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:*
+          Resource:
+          - !Sub arn:aws:s3:::${ArtifactBucket}/*
+          - !Sub arn:aws:s3:::${ArtifactBucket}
+          - !Sub 'arn:aws:s3:::${ManagedResourcePrefix}-${AWS::AccountId}*'
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - cloudformation.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: cfn-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:            
+          - Effect: Allow
+            Action:
+            - cloudformation:ValidateTemplate
+            Resource: "*"   
+      - PolicyName: s3-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - s3:* #fixme
+            Effect: Allow
+            Resource: "*"  #fixme
+      - PolicyName: iam-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - iam:* #fixme, for s3 bucket
+            Effect: Allow
+            Resource: "*"  #fixme            
+      - PolicyName: sso-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - sso:*
+            - sso-directory:*
+            Effect: Allow
+            Resource: "*"
+      - PolicyName: iam-admin-get-role
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+              - iam:GetRole
+            Effect: Allow
+            Resource: "*"
+      - PolicyName: sc-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - servicecatalog:*
+            Effect: Allow
+            Resource: "*"
+      - PolicyName: ssm-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            -  ssm:GetParameters
+            - ssm:PutParameter
+            Effect: Allow
+            Resource: "*"                  
+      - PolicyName: lambda-admin
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - lambda:*
+            Effect: Allow
+            Resource: "*"                  
+      - PolicyName: pipeline
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - kms:*
+            Effect: Allow
+            Resource: !GetAtt KMSKey.Arn
+          - Action:
+            - iam:*
+            Effect: Allow
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/${ManagedResourcePrefix}-*
+          - Action:
+            - codebuild:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ManagedResourcePrefix}-*
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}-*
+          - Action:
+            - codepipeline:*
+            - events:*
+            - logs:*
+            Effect: Allow
+            Resource: "*"
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: DeployAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - logs:*
+            Effect: Allow
+            Resource:
+            - Fn::Sub:
+              - 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${Prefix}*'
+              - Prefix: !Ref ManagedResourcePrefix
+          - Action:
+            - kms:*
+            Effect: Allow
+            Resource: !GetAtt KMSKey.Arn
+          - Action:
+            - ssm:Get*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - cloudformation:ValidateTemplate
+            - cloudformation:SetTypeConfiguration
+            - cloudformation:List*
+            - cloudformation:Describe*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:TagResource
+            - cloudformation:UntagResource
+            Effect: Allow
+            Resource: !Sub arn:aws:cloudformation:*:${AWS::AccountId}:stack/${ManagedResourcePrefix}*
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+          - Action:
+            - iam:PassRole
+            Effect: Allow
+            Resource: !GetAtt CloudFormationRole.Arn
+  # CodeBuildServiceRoleParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Name: /pipeline/codebuild/role
+  #     Value: !GetAtt CodeBuildServiceRole.Arn
+  #     Type: String
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - codepipeline.amazonaws.com
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: CodePipelineAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - iam:PassRole
+            - sts:AssumeRole
+            Effect: Allow
+            Resource:
+            - !GetAtt CodeBuildServiceRole.Arn
+            - !GetAtt CloudFormationRole.Arn
+            - 'arn:aws:iam::{{resolve:ssm:/org/management-account/id}}:role/DeploymentAccountAccessRole'
+            - 'arn:aws:iam::{{resolve:ssm:/org/management-account/id}}:role/CfnAdmin'
+          - Action:
+            - cloudformation:DescribeStacks
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:DeleteStack
+            - cloudformation:SetStackPolicy
+            Effect: Allow
+            Resource:
+            - Fn::Sub:
+              - arn:aws:cloudformation:${AWS::Region}:*:stack/${Prefix}*
+              - Prefix: !Ref ManagedResourcePrefix
+            - Fn::Sub:
+              - arn:aws:cloudformation:us-east-1:*:stack/${Prefix}*
+              - Prefix: !Ref ManagedResourcePrefix
+          - Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            - kms:DescribeKey
+            Effect: Allow
+            Resource:
+            - !GetAtt KMSKey.Arn
+            - !Sub arn:aws:kms:us-east-1:${AWS::AccountId}:key/*
+          - Action:
+            - codebuild:*
+            Effect: Allow
+            Resource:
+            - !GetAtt CodeBuildProjectPackage.Arn
+            - !GetAtt CodeBuildProjectBaseline.Arn
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+  EventsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - events.amazonaws.com
+      Policies:
+      - PolicyName: AllowCodePipelineTrigger
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - codepipeline:StartPipelineExecution
+            Resource:
+              Fn::Sub: arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+  PipelineTrigger:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub CodeCommit.Push to trigger CodePipeline for ${ManagedResourcePrefix}
+      State: ENABLED
+      EventPattern:
+        source:
+        - aws.codecommit
+        detail-type:
+        - 'CodeCommit Repository State Change'
+        resources:
+        - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+        detail:
+          event:
+          - referenceCreated
+          - referenceUpdated
+          referenceType:
+          - branch
+          - tag
+          referenceName:
+          - !Ref RepositorySourceBranch
+      Targets:
+      - Id: TargetCodePipeline
+        Arn:
+          Fn::Sub: arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+        RoleArn:
+          Fn::GetAtt:
+          - EventsRole
+          - Arn
+  CodeBuildProjectPackage:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/assets
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket 
+        - Name: SC_ARTIFACTS_BUCKET_NAME
+          Value: !Sub ${ManagedResourcePrefix}-sc-store
+        - Name: ARTIFACTS_BUCKET_CFN_ASSET_PREFIX
+          Value: cfn-assets
+        - Name: ARTIFACTS_BUCKET_SC_ASSET_PREFIX
+          Value: sc-assets
+      Name: !Sub ${ManagedResourcePrefix}-package
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectPackage}
+      RetentionInDays: 30
+  CodeBuildProjectBaseline:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/Baseline
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec_artifact_store.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_ASSET_PREFIX
+          Value: baseline-assets
+        - Name: ARTIFACTS_KMS_KEY_ARN
+          Value: !GetAtt KMSKey.Arn
+        - Name: JUMPSTART_CFN_ROLE_ARN
+          Value: !GetAtt CloudFormationRole.Arn
+        - Name: REGIONS
+          Value: !Ref AdditionalRegions
+        - Name: SC_ARTIFACTS_BUCKET_NAME 
+          Value:  !Sub ${ManagedResourcePrefix}-sc-store
+      Name:
+        Fn::Sub:
+        - ${Prefix}-baseline
+        - Prefix: !Ref ManagedResourcePrefix
+      TimeoutInMinutes: 120
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupBaseline:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectBaseline}
+      RetentionInDays: 30
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStores:
+      - Region: !Ref AWS::Region
+        ArtifactStore:
+          EncryptionKey:
+            Id: !Ref KMSKey
+            Type: KMS
+          Type: S3
+          Location: !Ref ArtifactBucket
+      # add more artifact stores in order to deploy in additional regions
+      # - Region: us-east-1
+      #   ArtifactStore:
+      #     EncryptionKey:
+      #       Id: !Ref KMSKey
+      #       Type: KMS
+      #     Type: S3
+      #     Location: !Sub '${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts'
+      Name: !Ref ManagedResourcePrefix
+      RoleArn:
+        Fn::GetAtt:
+        - PipelineRole
+        - Arn
+      Stages:
+      - Name: Sources
+        Actions:
+        - Name: GetSources
+          ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Version: '1'
+            Provider: CodeCommit
+          OutputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            BranchName: !Ref RepositorySourceBranch
+            RepositoryName: !Ref ManagedResourcePrefix
+            PollForSourceChanges: false
+          RunOrder: 1
+      - Name: DeployDeployment
+        Actions:
+        - Name: PipelineSelfUpdate
+          Namespace: pipeline
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-pipeline
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: complete-sources::deployment/pipeline.yaml
+            TemplateConfiguration: complete-sources::parameter/pipeline.json
+          RunOrder: 1
+        - Name: AdditionalRegions
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectBaseline
+          InputArtifacts:
+          - Name: complete-sources
+          RunOrder: 2
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectPackage
+          InputArtifacts:
+          - Name: complete-sources
+          OutputArtifacts:
+          - Name: stacks
+          RunOrder: 1
+      - Name: Deployment-Product 
+        Actions:
+        - Name: Org-Product-Util-Frankfurt
+          Namespace: deploy-util-org
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          RoleArn: 'arn:aws:iam::{{resolve:ssm:/org/management-account/id}}:role/DeploymentAccountAccessRole'
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM #CAPABILITY_IAM
+            RoleArn: 'arn:aws:iam::{{resolve:ssm:/org/management-account/id}}:role/CfnAdmin'
+            StackName: !Sub "${ManagedResourcePrefix}"
+            TemplatePath: stacks::build/packaged-main.yaml
+            TemplateConfiguration: complete-sources::parameter/main.json
+          RunOrder: 1
+        - Name: Product-Frankfurt
+          Namespace: deploy-org
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM #CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub "${ManagedResourcePrefix}-cdk"
+            TemplatePath: stacks::cdk/dist/CdkStack.template.json
+            TemplateConfiguration: complete-sources::parameter/main-cdk.json
+          RunOrder: 1
+Outputs:
+  KMSKeyArn:
+    Value: !GetAtt KMSKey.Arn

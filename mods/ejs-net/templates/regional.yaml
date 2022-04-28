@@ -1,0 +1,124 @@
+Description: EJS Regional Network Components
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-network
+  ASN:
+    Type: String
+  TransitGatewayCidr:
+    Type: String
+  RegionCidr:
+    Type: String
+
+Conditions:
+  TgwCidrIsSet: !Not [!Equals [!Ref TransitGatewayCidr, '']]
+Resources:
+  RegionCidrParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /networking/${AWS::Region}/cidr
+      Type: String
+      Value: !Ref RegionCidr
+      Description: !Sub CIDR block assigned to ${AWS::Region} AWS Region
+      Tags:
+        Region: !Ref AWS::Region
+  TransitGateway:
+    Type: AWS::EC2::TransitGateway
+    Properties:
+      AmazonSideAsn: !Ref ASN
+      AutoAcceptSharedAttachments: enable
+      DefaultRouteTableAssociation: disable
+      DefaultRouteTablePropagation: disable
+      Description: !Ref ManagedResourcePrefix
+      DnsSupport: enable
+      MulticastSupport: enable
+      TransitGatewayCidrBlocks:
+        Fn::If:
+        - TgwCidrIsSet
+        -
+          - !Ref TransitGatewayCidr
+        - !Ref AWS::NoValue
+      VpnEcmpSupport: enable
+      Tags:
+      - Key: Name
+        Value: !Ref ManagedResourcePrefix
+  TransitGatewayShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      AllowExternalPrincipals: False
+      Name: tgw-org-share
+      Principals:
+      - 'arn:aws:organizations::{{resolve:ssm:/org/management-account/id}}:organization/{{resolve:ssm:/org/id}}'
+      ResourceArns:
+      - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:transit-gateway/${TransitGateway}
+      Tags:
+      - Key: Name
+        Value: tgw-org-share
+  TransitGatewayIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /networking/${AWS::Region}/tgw-id
+      Type: String
+      Value: !Ref TransitGateway
+      Description: Main Transit Gateway Id
+      Tags:
+        Region: !Ref AWS::Region
+  TransitGatewayHubRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      Tags:
+      - Key: Name
+        Value: hub
+  TransitGatewayHubRouteTableParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /networking/${AWS::Region}/route-table/hub
+      Type: String
+      Value: !Ref TransitGatewayHubRouteTable
+      Description: Hub Transit Gateway Route Table Id
+      Tags:
+        Region: !Ref AWS::Region
+  TransitGatewayDevRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      Tags:
+      - Key: Name
+        Value: dev
+  TransitGatewayDevRouteTableParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /networking/${AWS::Region}/route-table/dev
+      Type: String
+      Value: !Ref TransitGatewayDevRouteTable
+      Description: Dev Transit Gateway Route Table Id
+      Tags:
+        Region: !Ref AWS::Region
+  TransitGatewayProdRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      TransitGatewayId: !Ref TransitGateway
+      Tags:
+      - Key: Name
+        Value: prod
+  TransitGatewayProdRouteTableParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /networking/${AWS::Region}/route-table/prod
+      Type: String
+      Value: !Ref TransitGatewayProdRouteTable
+      Description: Prod Transit Gateway Route Table Id
+      Tags:
+        Region: !Ref AWS::Region
+
+Outputs:
+  TransitGatewayId:
+    Value: !Ref TransitGateway
+  TransitGatewayHubRouteTable:
+    Value: !Ref TransitGatewayHubRouteTable
+  TransitGatewayDevRouteTable:
+    Value: !Ref TransitGatewayDevRouteTable
+  TransitGatewayProdRouteTable:
+    Value: !Ref TransitGatewayProdRouteTable

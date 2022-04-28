@@ -1,0 +1,787 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Pipeline for Enterprise Jumpstart Network Components
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-network
+  RepositorySourceBranch:
+    Type: String
+    Default: main
+  AdditionalRegions:
+    Type: String
+
+Resources:
+  CodeCommitUser:
+    Type: AWS::IAM::User
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AWSCodeCommitPowerUser
+      UserName: CodeCommitUser
+  EjsNetworkRepository:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryDescription: AWS Enterprise Jumpstart Networking Assets and Code
+      RepositoryName: !Ref ManagedResourcePrefix
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Encrypt/Decrypt EJS Network Assests
+      EnableKeyRotation: true
+      MultiRegion: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: !Ref AWS::StackName
+        Statement:
+        - Sid: Allows admin of the key
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - "kms:Create*"
+          - "kms:Describe*"
+          - "kms:Enable*"
+          - "kms:List*"
+          - "kms:Put*"
+          - "kms:Update*"
+          - "kms:Revoke*"
+          - "kms:Disable*"
+          - "kms:Get*"
+          - "kms:Delete*"
+          - "kms:ScheduleKeyDeletion"
+          - "kms:CancelKeyDeletion"
+          - "kms:ReplicateKey"
+          Resource: "*"
+        - Sid: Allow use of the key for Audit/Logs account
+          Effect: Allow
+          Principal:
+            AWS:
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:DescribeKey
+          Resource: "*"
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${ManagedResourcePrefix}-codepipeline
+      TargetKeyId: !Ref KMSKey
+  ArtifactBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            KMSMasterKeyID: !Ref KMSKey
+            SSEAlgorithm: 'aws:kms'
+  ArtifactBucketNameParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /network/artifact-bucket/name
+      Value: !Ref ArtifactBucket
+      Type: String
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - 's3:GetObject'
+          Effect: Allow
+          Resource: !Join
+          - ''
+          - - 'arn:aws:s3:::'
+            - !Ref ArtifactBucket
+            - /*
+          Principal:
+            AWS:
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+  BucketAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Allow usage of custom resource
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:Get*
+          - s3:Put*
+          - s3:List*
+          Resource:
+          - !Sub arn:aws:s3:::${ArtifactBucket}/*
+          - !Sub arn:aws:s3:::${ArtifactBucket}
+          - !Sub 'arn:aws:s3:::${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts'
+          - !Sub 'arn:aws:s3:::${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts/*'
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - cloudformation.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      - arn:aws:iam::aws:policy/AdministratorAccess
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: DeployAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - logs:*
+            Effect: Allow
+            Resource:
+            - Fn::Sub:
+              - 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${Prefix}*'
+              - Prefix: !Ref ManagedResourcePrefix
+          - Action:
+            - kms:*
+            Effect: Allow
+            Resource: !GetAtt KMSKey.Arn
+          - Action:
+            - ssm:Get*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - servicecatalog:*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - cloudformation:ValidateTemplate
+            - cloudformation:SetTypeConfiguration
+            - cloudformation:List*
+            - cloudformation:Describe*
+            Effect: Allow
+            Resource: "*"
+          - Action:
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:TagResource
+            - cloudformation:UntagResource
+            Effect: Allow
+            Resource: !Sub arn:aws:cloudformation:*:${AWS::AccountId}:stack/${ManagedResourcePrefix}*
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+          - Action:
+            - iam:PassRole
+            Effect: Allow
+            Resource: !GetAtt CloudFormationRole.Arn
+  CodeBuildServiceRoleParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /pipeline/codebuild/role
+      Value: !GetAtt CodeBuildServiceRole.Arn
+      Type: String
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - codepipeline.amazonaws.com
+      ManagedPolicyArns:
+      - !Ref BucketAccessPolicy
+      Policies:
+      - PolicyName: CodePipelineAccess
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - iam:PassRole
+            Effect: Allow
+            Resource:
+            - !GetAtt CodeBuildServiceRole.Arn
+            - !GetAtt CloudFormationRole.Arn
+          - Action:
+            - cloudformation:DescribeStacks
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:DeleteStack
+            - cloudformation:SetStackPolicy
+            Effect: Allow
+            Resource:
+            - Fn::Sub:
+              - arn:aws:cloudformation:${AWS::Region}:*:stack/${Prefix}*
+              - Prefix: !Ref ManagedResourcePrefix
+            - Fn::Sub:
+              - arn:aws:cloudformation:us-east-1:*:stack/${Prefix}*
+              - Prefix: !Ref ManagedResourcePrefix
+          - Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            - kms:DescribeKey
+            Effect: Allow
+            Resource:
+            - !GetAtt KMSKey.Arn
+            - !Sub arn:aws:kms:us-east-1:${AWS::AccountId}:key/*
+          - Action:
+            - codebuild:*
+            Effect: Allow
+            Resource:
+            - !GetAtt CodeBuildProjectPackage.Arn
+            - !GetAtt CodeBuildProjectBaseline.Arn
+          - Action:
+            - codecommit:*
+            Effect: Allow
+            Resource: !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+  EventsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - events.amazonaws.com
+      Policies:
+      - PolicyName: AllowCodePipelineTrigger
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - codepipeline:StartPipelineExecution
+            Resource:
+              Fn::Sub: arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+  PipelineTrigger:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub CodeCommit.Push to trigger CodePipeline for ${ManagedResourcePrefix}
+      State: ENABLED
+      EventPattern:
+        source:
+        - aws.codecommit
+        detail-type:
+        - 'CodeCommit Repository State Change'
+        resources:
+        - !Sub arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${ManagedResourcePrefix}
+        detail:
+          event:
+          - referenceCreated
+          - referenceUpdated
+          referenceType:
+          - branch
+          - tag
+          referenceName:
+          - !Ref RepositorySourceBranch
+      Targets:
+      - Id: TargetCodePipeline
+        Arn:
+          Fn::Sub: arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
+        RoleArn:
+          Fn::GetAtt:
+          - EventsRole
+          - Arn
+  CodeBuildProjectPackage:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/assets
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_NAME_US_EAST_1
+          Value: !Sub ${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts
+        - Name: ARTIFACTS_BUCKET_CFN_ASSET_PREFIX
+          Value: cfn-assets
+      Name: !Sub ${ManagedResourcePrefix}-package
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectPackage}
+      RetentionInDays: 30
+  CodeBuildProjectBaseline:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Cache:
+        Location:
+          Fn::Sub:
+          - ${BucketName}/cache/${ServiceName}/Baseline
+          - BucketName: !Ref ArtifactBucket
+            ServiceName: !Ref ManagedResourcePrefix
+        Type: S3
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: deployment/buildspec_artifact_store.yaml
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: false
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+        - Name: AWS_ACCOUNT_ID
+          Value:
+            Ref: AWS::AccountId
+        - Name: SERVICE_NAME
+          Value: !Ref ManagedResourcePrefix
+        - Name: ARTIFACTS_BUCKET_NAME
+          Value: !Ref ArtifactBucket
+        - Name: ARTIFACTS_BUCKET_ASSET_PREFIX
+          Value: baseline-assets
+        - Name: ARTIFACTS_KMS_KEY_ARN
+          Value: !GetAtt KMSKey.Arn
+        - Name: JUMPSTART_CFN_ROLE_ARN
+          Value: !GetAtt CloudFormationRole.Arn
+        - Name: REGIONS
+          Value: !Ref AdditionalRegions
+      Name:
+        Fn::Sub:
+        - ${Prefix}-baseline
+        - Prefix: !Ref ManagedResourcePrefix
+      TimeoutInMinutes: 120
+      EncryptionKey: !GetAtt KMSKey.Arn
+      ServiceRole:
+        Ref: CodeBuildServiceRole
+  CodeBuildLogGroupBaseline:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/codebuild/${CodeBuildProjectBaseline}
+      RetentionInDays: 30
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStores:
+      - Region: !Ref AWS::Region
+        ArtifactStore:
+          EncryptionKey:
+            Id: !Ref KMSKey
+            Type: KMS
+          Type: S3
+          Location: !Ref ArtifactBucket
+      # add more artifact stores in order to deploy in additional regions
+      # - Region: us-east-1
+      #   ArtifactStore:
+      #     EncryptionKey:
+      #       Id: !Ref KMSKey
+      #       Type: KMS
+      #     Type: S3
+      #     Location: !Sub '${ManagedResourcePrefix}-${AWS::AccountId}-us-east-1-artifacts'
+      Name: !Ref ManagedResourcePrefix
+      RoleArn:
+        Fn::GetAtt:
+        - PipelineRole
+        - Arn
+      Stages:
+      - Name: Sources
+        Actions:
+        - Name: GetSources
+          ActionTypeId:
+            Category: Source
+            Owner: AWS
+            Version: '1'
+            Provider: CodeCommit
+          OutputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            BranchName: !Ref RepositorySourceBranch
+            RepositoryName: !Ref ManagedResourcePrefix
+            PollForSourceChanges: false
+          RunOrder: 1
+      - Name: DeployDeployment
+        Actions:
+        - Name: PipelineSelfUpdate
+          Namespace: pipeline
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_NAMED_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-pipeline
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: complete-sources::deployment/pipeline.yaml
+            TemplateConfiguration: complete-sources::parameter/pipeline.json
+          RunOrder: 1
+        - Name: AdditionalRegions
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectBaseline
+          InputArtifacts:
+          - Name: complete-sources
+          RunOrder: 2
+      - Name: Build
+        Actions:
+        - Name: Build
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          Configuration:
+            ProjectName:
+              Ref: CodeBuildProjectPackage
+          InputArtifacts:
+          - Name: complete-sources
+          OutputArtifacts:
+          - Name: stacks
+          RunOrder: 1
+      - Name: GlobalDeployment
+        Actions:
+        - Name: Global
+          Namespace: global
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-global
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-global.yaml
+            TemplateConfiguration: complete-sources::parameter/global.json
+          RunOrder: 1
+      - Name: RegionalDeployment
+        Actions:
+        - Name: !Ref AWS::Region
+          Namespace: !Ref AWS::Region
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-regional
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-regional.yaml
+            TemplateConfiguration: complete-sources::parameter/regional.json
+          RunOrder: 1
+        # - Name: us-east-1
+        #   Namespace: us-east-1
+        #   ActionTypeId:
+        #     Category: Deploy
+        #     Owner: AWS
+        #     Provider: CloudFormation
+        #     Version: '1'
+        #   InputArtifacts:
+        #   - Name: stacks
+        #   - Name: complete-sources
+        #   Configuration:
+        #     ActionMode: CREATE_UPDATE
+        #     Capabilities: CAPABILITY_IAM
+        #     RoleArn:
+        #       Fn::GetAtt:
+        #       - CloudFormationRole
+        #       - Arn
+        #     StackName: !Sub
+        #     - ${Prefix}-regional
+        #     - Prefix: !Ref ManagedResourcePrefix
+        #     TemplatePath: stacks::build/packaged-regional-us-east-1.yaml
+        #     TemplateConfiguration: complete-sources::parameter/regional-us-east-1.json
+        #   RunOrder: 1
+        #   Region: us-east-1
+        - Name: !Sub ${AWS::Region}-automation
+          Namespace: !Sub ${AWS::Region}-automation
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-regional-automation
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-regional-automation.yaml
+          RunOrder: 2
+        # - Name: us-east-1-automation
+        #   Namespace: us-east-1-automation
+        #   ActionTypeId:
+        #     Category: Deploy
+        #     Owner: AWS
+        #     Provider: CloudFormation
+        #     Version: '1'
+        #   InputArtifacts:
+        #   - Name: stacks
+        #   - Name: complete-sources
+        #   Configuration:
+        #     ActionMode: CREATE_UPDATE
+        #     Capabilities: CAPABILITY_IAM
+        #     RoleArn:
+        #       Fn::GetAtt:
+        #       - CloudFormationRole
+        #       - Arn
+        #     StackName: !Sub
+        #     - ${Prefix}-regional-automation
+        #     - Prefix: !Ref ManagedResourcePrefix
+        #     TemplatePath: stacks::build/packaged-regional-automation-us-east-1.yaml
+        #   RunOrder: 2
+        #   Region: us-east-1
+        - Name: !Sub ${AWS::Region}-egress-vpc
+          Namespace: !Sub ${AWS::Region}-egress-vpc
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-regional-egress-vpc
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-regional-egress-vpc.yaml
+            TemplateConfiguration: complete-sources::parameter/regional-egress-vpc.json
+          RunOrder: 2
+        # - Name: us-east-1-egressVpc
+        #   Namespace: us-east-1-egress-vpc
+        #   ActionTypeId:
+        #     Category: Deploy
+        #     Owner: AWS
+        #     Provider: CloudFormation
+        #     Version: '1'
+        #   InputArtifacts:
+        #   - Name: stacks
+        #   - Name: complete-sources
+        #   Configuration:
+        #     ActionMode: CREATE_UPDATE
+        #     Capabilities: CAPABILITY_IAM
+        #     RoleArn:
+        #       Fn::GetAtt:
+        #       - CloudFormationRole
+        #       - Arn
+        #     StackName: !Sub
+        #     - ${Prefix}-regional-egress-vpc
+        #     - Prefix: !Ref ManagedResourcePrefix
+        #     TemplatePath: stacks::build/packaged-regional-egress-vpc-us-east-1.yaml
+        #     TemplateConfiguration: complete-sources::parameter/regional-egress-vpc-us-east-1.json
+        #   RunOrder: 2
+        #   Region: us-east-1
+        - Name: !Sub ${AWS::Region}-inspection-vpc
+          Namespace: !Sub ${AWS::Region}-inspection-vpc
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-regional-inspection-vpc
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-regional-inspection-vpc.yaml
+            TemplateConfiguration: complete-sources::parameter/regional-inspection-vpc.json
+          RunOrder: 2
+        # - Name: us-east-1-inspectionVpc
+        #   Namespace: us-east-1-inspection-vpc
+        #   ActionTypeId:
+        #     Category: Deploy
+        #     Owner: AWS
+        #     Provider: CloudFormation
+        #     Version: '1'
+        #   InputArtifacts:
+        #   - Name: stacks
+        #   - Name: complete-sources
+        #   Configuration:
+        #     ActionMode: CREATE_UPDATE
+        #     Capabilities: CAPABILITY_IAM
+        #     RoleArn:
+        #       Fn::GetAtt:
+        #       - CloudFormationRole
+        #       - Arn
+        #     StackName: !Sub
+        #     - ${Prefix}-regional-inspection-vpc
+        #     - Prefix: !Ref ManagedResourcePrefix
+        #     TemplatePath: stacks::build/packaged-regional-inspection-vpc-us-east-1.yaml
+        #     TemplateConfiguration: complete-sources::parameter/regional-inspection-vpc-us-east-1.json
+        #   RunOrder: 2
+        #   Region: us-east-1
+        - Name: !Sub ${AWS::Region}-firewall
+          Namespace: !Sub ${AWS::Region}-firewall
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Provider: CloudFormation
+            Version: '1'
+          InputArtifacts:
+          - Name: stacks
+          - Name: complete-sources
+          Configuration:
+            ActionMode: CREATE_UPDATE
+            Capabilities: CAPABILITY_IAM
+            RoleArn:
+              Fn::GetAtt:
+              - CloudFormationRole
+              - Arn
+            StackName: !Sub
+            - ${Prefix}-regional-network-firewall
+            - Prefix: !Ref ManagedResourcePrefix
+            TemplatePath: stacks::build/packaged-regional-network-firewall.yaml
+            TemplateConfiguration: complete-sources::parameter/regional-network-firewall.json
+            ParameterOverrides: !Sub >-
+              {
+                "InspectionVpc": "#{${AWS::Region}-inspection-vpc.Vpc}",
+                "FirewallRouteTableA": "#{${AWS::Region}-inspection-vpc.FirewallRouteTableA}",
+                "FirewallRouteTableB": "#{${AWS::Region}-inspection-vpc.FirewallRouteTableB}",
+                "FirewallRouteTableC": "#{${AWS::Region}-inspection-vpc.FirewallRouteTableC}",
+                "FirewallSubnetA": "#{${AWS::Region}-inspection-vpc.FirewallSubnetA}",
+                "FirewallSubnetB": "#{${AWS::Region}-inspection-vpc.FirewallSubnetB}",
+                "FirewallSubnetC": "#{${AWS::Region}-inspection-vpc.FirewallSubnetC}",
+                "TgwRouteTableA": "#{${AWS::Region}-inspection-vpc.TransitGatewayRouteTableA}",
+                "TgwRouteTableB": "#{${AWS::Region}-inspection-vpc.TransitGatewayRouteTableB}",
+                "TgwRouteTableC": "#{${AWS::Region}-inspection-vpc.TransitGatewayRouteTableC}"
+              }
+          RunOrder: 3
+        # - Name: us-east-1-firewall
+        #   Namespace: us-east-1-firewall
+        #   ActionTypeId:
+        #     Category: Deploy
+        #     Owner: AWS
+        #     Provider: CloudFormation
+        #     Version: '1'
+        #   InputArtifacts:
+        #   - Name: stacks
+        #   - Name: complete-sources
+        #   Configuration:
+        #     ActionMode: CREATE_UPDATE
+        #     Capabilities: CAPABILITY_IAM
+        #     RoleArn:
+        #       Fn::GetAtt:
+        #       - CloudFormationRole
+        #       - Arn
+        #     StackName: !Sub
+        #     - ${Prefix}-regional-network-firewall
+        #     - Prefix: !Ref ManagedResourcePrefix
+        #     TemplatePath: stacks::build/packaged-regional-network-firewall-us-east-1.yaml
+        #     TemplateConfiguration: complete-sources::parameter/regional-network-firewall-us-east-1.json
+        #     ParameterOverrides: >-
+        #       {
+        #         "InspectionVpc": "#{us-east-1-inspection-vpc.Vpc}",
+        #         "FirewallRouteTableA": "#{us-east-1-inspection-vpc.FirewallRouteTableA}",
+        #         "FirewallRouteTableB": "#{us-east-1-inspection-vpc.FirewallRouteTableB}",
+        #         "FirewallRouteTableC": "#{us-east-1-inspection-vpc.FirewallRouteTableC}",
+        #         "FirewallSubnetA": "#{us-east-1-inspection-vpc.FirewallSubnetA}",
+        #         "FirewallSubnetB": "#{us-east-1-inspection-vpc.FirewallSubnetB}",
+        #         "FirewallSubnetC": "#{us-east-1-inspection-vpc.FirewallSubnetC}",
+        #         "TgwRouteTableA": "#{us-east-1-inspection-vpc.TransitGatewayRouteTableA}",
+        #         "TgwRouteTableB": "#{us-east-1-inspection-vpc.TransitGatewayRouteTableB}",
+        #         "TgwRouteTableC": "#{us-east-1-inspection-vpc.TransitGatewayRouteTableC}"
+        #       }
+        #   RunOrder: 3
+        #   Region: us-east-1
+
+Outputs:
+  KMSKeyArn:
+    Value: !GetAtt KMSKey.Arn

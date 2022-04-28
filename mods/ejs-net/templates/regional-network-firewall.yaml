@@ -1,0 +1,105 @@
+Description: AWS Network Firewall Components
+
+Parameters:
+  Identifier:
+    Type: String
+  InspectionVpc:
+    Type: String
+  FirewallSubnetA:
+    Type: String
+  FirewallSubnetB:
+    Type: String
+  FirewallSubnetC:
+    Type: String
+  FirewallRouteTableA:
+    Type: String
+  FirewallRouteTableB:
+    Type: String
+  FirewallRouteTableC:
+    Type: String
+  TgwRouteTableA:
+    Type: String
+  TgwRouteTableB:
+    Type: String
+  TgwRouteTableC:
+    Type: String
+
+Mappings:
+  # Endpoint id's within firewall return value are not in order, id's hardcoded
+  FirewallEndpoints:
+    eu-central-1:
+      AvailabilityZoneA: vpce-076bb1cd0fc040561
+      AvailabilityZoneB: vpce-0f8b510ed2fa630da
+      AvailabilityZoneC: vpce-0aed33e330a79a1af
+    # us-east-1:
+    #   AvailabilityZoneA: vpce-076bb1cd0fc040561
+    #   AvailabilityZoneB: vpce-0f8b510ed2fa630da
+    #   AvailabilityZoneC: vpce-0aed33e330a79a1af
+Resources:
+  Firewall:
+    Type: AWS::NetworkFirewall::Firewall
+    Properties:
+      FirewallName: !Ref Identifier
+      FirewallPolicyArn: !Ref FirewallPolicy
+      VpcId: !Ref InspectionVpc
+      SubnetMappings:
+        - SubnetId: !Ref FirewallSubnetA
+        - SubnetId: !Ref FirewallSubnetB
+        - SubnetId: !Ref FirewallSubnetC
+      Description: Central Transit Gateway attached inspection firewall
+  RouteToFirewallA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref TgwRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      VpcEndpointId: !Select [1, !Split [':', !Select [0, !GetAtt Firewall.EndpointIds]]]
+      # VpcEndpointId: !FindInMap [FirewallEndpoints, !Ref AWS::Region, AvailabilityZoneA]
+  RouteToFirewallB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref TgwRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      VpcEndpointId: !Select [1, !Split [':', !Select [1, !GetAtt Firewall.EndpointIds]]]
+      # VpcEndpointId: !FindInMap [FirewallEndpoints, !Ref AWS::Region, AvailabilityZoneB]
+  RouteToFirewallC:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref TgwRouteTableC
+      DestinationCidrBlock: 0.0.0.0/0
+      VpcEndpointId: !Select [1, !Split [':', !Select [2, !GetAtt Firewall.EndpointIds]]]
+      # VpcEndpointId: !FindInMap [FirewallEndpoints, !Ref AWS::Region, AvailabilityZoneC]
+  FirewallPolicy:
+    Type: 'AWS::NetworkFirewall::FirewallPolicy'
+    Properties:
+      FirewallPolicyName: !Sub ${Identifier}-default
+      FirewallPolicy:
+        StatelessDefaultActions:
+        - 'aws:pass'
+        StatelessFragmentDefaultActions:
+        - 'aws:pass'
+        StatefulRuleGroupReferences:
+        - ResourceArn: !Ref StatefulRulegroup
+        # StatelessRuleGroupReferences:
+        #   - ResourceArn: !Ref SampleStatelessRuleGroup
+        #     Priority: 100
+      Description: Central Transit Gateway attached inspection firewall policy
+  StatefulRulegroup:
+    Type: 'AWS::NetworkFirewall::RuleGroup'
+    Properties:
+      RuleGroupName: PassAny
+      Type: STATEFUL
+      RuleGroup:
+        RulesSource:
+          RulesString: >-
+            pass ip any any <> any any
+            (msg:"test";sid:1;rev:1;)
+      Capacity: 100
+      Description: Pass Any        
+
+Outputs:
+  FirewallEndpointId1:
+    Value: !Select [0, !GetAtt Firewall.EndpointIds]
+  FirewallEndpointId2:
+    Value: !Select [1, !GetAtt Firewall.EndpointIds]
+  FirewallEndpointId3:
+    Value: !Select [2, !GetAtt Firewall.EndpointIds]

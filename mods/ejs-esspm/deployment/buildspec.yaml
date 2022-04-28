@@ -1,0 +1,27 @@
+version: 0.2
+cache:
+  paths:
+  - ~/.cache/pip/**/*
+phases:
+  install:
+    runtime-versions:
+      python: 3.8
+    commands:
+      - pip install boto3 cfn-flip
+  pre_build:
+    commands:
+    - echo "Building with $(python --version)"
+  build:
+    commands:
+    - mkdir -p build
+    - aws cloudformation package --template-file templates/main.yaml --s3-bucket "$ARTIFACTS_BUCKET_NAME" --s3-prefix "$ARTIFACTS_BUCKET_CFN_ASSET_PREFIX" --output-template-file build/packaged-main.yaml
+    - ./scripts/build_products.sh
+  post_build:
+    commands:
+    - echo Build completed on $(date)
+    - echo Files in build dir 
+    - find build/ -print  
+artifacts:
+  files:
+  - cdk/dist/*
+  - build/*

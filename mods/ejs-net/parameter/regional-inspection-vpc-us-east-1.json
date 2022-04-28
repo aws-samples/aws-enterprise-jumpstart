@@ -1,0 +1,9 @@
+{
+  "Parameters": {
+    "Identifier": "inspection-vpc",
+    "TransitGatewaySubnetCidr": "10.2.3.0/24",
+    "FirewallSubnetCidr": "10.2.4.0/24",
+    "TransitGatewaySubnetPrefixLength": "26",
+    "FirewallSubnetPrefixLength": "26"
+  }
+}

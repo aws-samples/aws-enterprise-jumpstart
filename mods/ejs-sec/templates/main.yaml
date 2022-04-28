@@ -1,0 +1,477 @@
+Description: Enterprise Jumspstart Security Module Resources
+Transform: AWS::Serverless-2016-10-31
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-security
+  HomeRegion:
+    Type: String
+  OrgRegions:
+    Type: AWS::SSM::Parameter::Value<List<String>>
+    Default: /org/regions
+  Identifier:
+    Type: String
+    Default: EjsSecurity
+  Path:
+    Type: String
+    Description: Path for IAM Role
+  MemberIAMRoleName:
+    Type: String
+    Description: Name of IAM Role in member account
+  MemberIAMRolePath:
+    Type: String
+    Description: Path of IAM Role in member account
+  Schedule:
+    Type: String
+    Description: The scheduling expression that determines when and how often the SecurityHubUpdater runs.
+  EventTriggerState:
+    Type: String
+    AllowedValues: ["ENABLED", "DISABLED"]
+    Description: The state of the SecurityHubUpdateEvent rule monitoring Security Hub control updates and triggering the state machine
+
+Conditions:
+  HomeRegion: !Equals [!Ref AWS::Region, !Ref HomeRegion]
+
+Resources:
+
+  AccountExceptions:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "ControlId"
+          AttributeType: "S"
+        # -
+        #   AttributeName: "Disabled"
+        #   AttributeType: "S"
+        # -
+        #   AttributeName: "Enabled"
+        #   AttributeType: "S"
+      BillingMode: "PAY_PER_REQUEST"
+      KeySchema:
+        -
+          AttributeName: "ControlId"
+          KeyType: "HASH"
+      # ProvisionedThroughput:
+      #   ReadCapacityUnits: 5
+      #   WriteCapacityUnits: 5
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: !Ref Path
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: sts:AssumeRole
+              Resource:
+                - !Sub "arn:aws:iam::*:role${MemberIAMRolePath}${MemberIAMRoleName}"
+            - Effect: Allow
+              Action:
+                - securityhub:Get*
+                - securityhub:List*
+                - securityhub:Describe*
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource: !GetAtt AccountExceptions.Arn
+        PolicyName: SecurityHubUpdateStandardsControlPolicyForLambda
+
+  CheckResult:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../securityhub-updater/src/CheckResult
+      Description: Checks results of UpdateMember executions
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Runtime: python3.8
+      Timeout: 300
+
+  GetMembers:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../securityhub-updater/src/GetMembers
+      Description: Get list of member accounts from SecurityHub
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Runtime: python3.8
+      Timeout: 300
+      Environment:
+        Variables:
+          Schedule: !Ref Schedule
+          DynamoDB: !Ref AccountExceptions
+
+  UpdateMember:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../securityhub-updater/src/UpdateMember
+      Description: Update the state of SecurityHub findings in all member accounts
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - LambdaExecutionRole
+        - Arn
+      Runtime: python3.8
+      Timeout: 900
+      Environment:
+        Variables:
+          MemberRole: !Sub "arn:aws:iam::<accountId>:role${MemberIAMRolePath}${MemberIAMRoleName}"
+
+  SecurityHubMemberUpdateStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - states.amazonaws.com
+        Version: "2012-10-17"
+      Policies:
+        - PolicyName: InvokeLambdaPolicyForStateMachines
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Sid: InvokeLambdas
+                Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                  - "lambda:Get*"
+                  - "lambda:List*"
+                Resource:
+                  - !GetAtt UpdateMember.Arn
+                  - !GetAtt GetMembers.Arn
+                  - !GetAtt CheckResult.Arn
+              - Sid: PublishSNS
+                Effect: Allow
+                Action:
+                  - "sns:Publish"
+                Resource: !Sub arn:aws:sns:${HomeRegion}:{{resolve:ssm:/org/deployment-account/id}}:aws-account-creation
+
+  SecurityHubMemberUpdate:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Role: !GetAtt SecurityHubMemberUpdateStateMachineRole.Arn
+      DefinitionUri: ../securityhub-updater/stateMachine.json
+      DefinitionSubstitutions:
+        UpdateMember: !GetAtt UpdateMember.Arn
+        GetMembers: !GetAtt GetMembers.Arn
+        CheckResult: !GetAtt CheckResult.Arn
+        StateMachineFailureSNSTopic: !Sub arn:aws:sns:${HomeRegion}:{{resolve:ssm:/org/deployment-account/id}}:aws-account-creation
+      Events:
+        Scheduled:
+          Type: Schedule
+          Properties:
+            Input: '{"scheduled": "True"}'
+            Schedule: !Ref Schedule
+
+  SecurityHubUpdatedEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: This rule monitors Security Hub and executes the state machine if a Security Hub control was updated
+      State: !Ref EventTriggerState
+      RoleArn: !GetAtt SecurityHubUpdatedEventRole.Arn
+      Targets:
+      - Arn: !Ref SecurityHubMemberUpdate
+        Id: SecurityHubUpdaterStateMachine
+        RoleArn: !GetAtt SecurityHubUpdatedEventRole.Arn
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - securityhub.amazonaws.com
+          eventName:
+            - UpdateStandardsControl
+            - BatchDisableStandards
+            - BatchEnableStandards
+
+  SecurityHubUpdatedEventRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: !Ref Path
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - events.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+      - PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: !Ref SecurityHubMemberUpdate
+        PolicyName: StartStateMachine
+
+
+  # CloudTrail Data Analyzis
+  Database:
+    Condition: HomeRegion
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Description: Databse for platform logs
+        Name: platformlogs
+  CloudtrailLogAggregatorTable:
+    Condition: HomeRegion
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId:
+        Ref: AWS::AccountId
+      DatabaseName:
+        Ref: Database
+      TableInput:
+        Name: cloudtrail_aggregator
+        Description: AWS CloudTrail Aggregator Table
+        Parameters:
+          EXTERNAL: "TRUE"
+        TableType: EXTERNAL_TABLE
+        StorageDescriptor:
+          Columns:
+          - Name: eventversion
+            Type: string
+          - Name: useridentity
+            Type: struct<type:string,principalid:string,arn:string,accountid:string,invokedby:string,accesskeyid:string,username:string,sessioncontext:struct<attributes:struct<mfaauthenticated:string,creationdate:string>,sessionissuer:struct<type:string,principalid:string,arn:string,accountid:string,username:string>>>
+          - Name: eventtime
+            Type: string
+          - Name: eventsource
+            Type: string
+          - Name: eventname
+            Type: string
+          - Name: awsregion
+            Type: string
+          - Name: sourceipaddress
+            Type: string
+          - Name: useragent
+            Type: string
+          - Name: errorcode
+            Type: string
+          - Name: errormessage
+            Type: string
+          - Name: requestparameters
+            Type: string
+          - Name: responseelements
+            Type: string
+          - Name: additionaleventdata
+            Type: string
+          - Name: requestid
+            Type: string
+          - Name: eventid
+            Type: string
+          - Name: resources
+            Type: array<struct<arn:string,accountid:string,type:string>>
+          - Name: eventtype
+            Type: string
+          - Name: apiversion
+            Type: string
+          - Name: readonly
+            Type: string
+          - Name: recipientaccountid
+            Type: string
+          - Name: serviceeventdetails
+            Type: string
+          - Name: sharedeventid
+            Type: string
+          - Name: vpcendpointid
+            Type: string
+          - Name: _
+            Type: string
+          Location:
+            Fn::Sub: s3://cloudtrail-log-archive-{{resolve:ssm:/org/id}}/AWSLogs/{{resolve:ssm:/org/id}}/
+          InputFormat: com.amazon.emr.cloudtrail.CloudTrailInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          Compressed: false
+          StoredAsSubDirectories: false
+          SerdeInfo:
+            SerializationLibrary: com.amazon.emr.hive.serde.CloudTrailSerde
+            Parameters:
+              serialization.format: '1'
+          Parameters: {}
+        Retention: 0
+  CloudtrailLogTable:
+    Condition: HomeRegion
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId:
+        Ref: AWS::AccountId
+      DatabaseName:
+        Ref: Database
+      TableInput:
+        Name: cloudtrail
+        Description: AWS CloudTrail Table
+        Parameters:
+          projection.enabled: true
+          projection.date_time.type: date
+          projection.date_time.range: 2022/01/01,NOW
+          projection.date_time.format: yyyy/MM/dd
+          projection.date_time.interval: 1
+          projection.date_time.interval.unit: DAYS
+          projection.region.type: enum
+          projection.region.values: !Join [',', !Ref OrgRegions]
+          projection.account_id.type: injected
+          EXTERNAL: "TRUE"
+          storage.location.template: !Sub s3://cloudtrail-log-archive-{{resolve:ssm:/org/id}}/AWSLogs/{{resolve:ssm:/org/id}}/${!account_id}/CloudTrail/${!region}/${!date_time}/
+        TableType: EXTERNAL_TABLE
+        PartitionKeys:
+        - Comment: The id of the account in whichh the API has been called
+          Name: account_id
+          Type: string
+        - Comment: The region of the API
+          Name: region
+          Type: string
+        - Comment: The date time of the API action
+          Name: date_time
+          Type: string
+        StorageDescriptor:
+          Columns:
+          - Name: eventversion
+            Type: string
+          - Name: useridentity
+            Type: struct<type:string,principalid:string,arn:string,accountid:string,invokedby:string,accesskeyid:string,username:string,sessioncontext:struct<attributes:struct<mfaauthenticated:string,creationdate:string>,sessionissuer:struct<type:string,principalid:string,arn:string,accountid:string,username:string>>>
+          - Name: eventtime
+            Type: string
+          - Name: eventsource
+            Type: string
+          - Name: eventname
+            Type: string
+          - Name: awsregion
+            Type: string
+          - Name: sourceipaddress
+            Type: string
+          - Name: useragent
+            Type: string
+          - Name: errorcode
+            Type: string
+          - Name: errormessage
+            Type: string
+          - Name: requestparameters
+            Type: string
+          - Name: responseelements
+            Type: string
+          - Name: additionaleventdata
+            Type: string
+          - Name: requestid
+            Type: string
+          - Name: eventid
+            Type: string
+          - Name: resources
+            Type: array<struct<arn:string,accountid:string,type:string>>
+          - Name: eventtype
+            Type: string
+          - Name: apiversion
+            Type: string
+          - Name: readonly
+            Type: string
+          - Name: recipientaccountid
+            Type: string
+          - Name: serviceeventdetails
+            Type: string
+          - Name: sharedeventid
+            Type: string
+          - Name: vpcendpointid
+            Type: string
+          - Name: _
+            Type: string
+          Location:
+            Fn::Sub: s3://cloudtrail-log-archive-{{resolve:ssm:/org/id}}/AWSLogs/{{resolve:ssm:/org/id}}/
+          InputFormat: com.amazon.emr.cloudtrail.CloudTrailInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          Compressed: false
+          StoredAsSubDirectories: false
+          SerdeInfo:
+            SerializationLibrary: com.amazon.emr.hive.serde.CloudTrailSerde
+            Parameters:
+              serialization.format: '1'
+          Parameters: {}
+        Retention: 0
+  AthenaSecurityBucket:
+    Condition: HomeRegion
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ManagedResourcePrefix}-{{resolve:ssm:/org/id}}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  SecurityAthenaWorkgroup:
+    Condition: HomeRegion
+    Type: AWS::Athena::WorkGroup
+    Properties: 
+      Description: EJS Security Workgroup
+      Name: !Ref ManagedResourcePrefix
+      State: ENABLED
+      WorkGroupConfiguration: 
+        ResultConfiguration: 
+          EncryptionConfiguration: 
+            EncryptionOption: SSE_S3
+          OutputLocation: !Sub s3://${AthenaSecurityBucket}/${ManagedResourcePrefix}/
+
+  # Storage Visbility with S3 Storage Lens
+  StorageLensDashboard:
+    Condition: HomeRegion
+    Type: AWS::S3::StorageLens
+    Properties:
+      StorageLensConfiguration:
+        AccountLevel:
+          ActivityMetrics:
+            IsEnabled: True
+          BucketLevel:
+            ActivityMetrics:
+              IsEnabled: True
+        AwsOrg:
+          Arn: arn:aws:organizations::{{resolve:ssm:/org/management-account/id}}:organization/{{resolve:ssm:/org/id}}
+        Id: !Ref ManagedResourcePrefix
+        Include:
+          Regions: !Ref OrgRegions
+        IsEnabled: True
+
+  # Macie
+  # VPC Flow Logs
+  # Config Athena
+
+Outputs:
+  StateMachineArn:
+    Value: !Ref SecurityHubMemberUpdate
+  CheckResultLambda:
+    Value: !Ref CheckResult
+  GetMembersLambda:
+    Value: !Ref GetMembers
+  UpdateMemberLambda:
+    Value: !Ref UpdateMember
+  AccountExceptionsDynamoDBTableName:
+    Value: !Ref AccountExceptions

@@ -1,0 +1,8 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ejs-network",
+    "ASN": "64512",
+    "TransitGatewayCidr": "10.1.0.0/24",
+    "RegionCidr": "10.1.0.0/16"
+  }
+}

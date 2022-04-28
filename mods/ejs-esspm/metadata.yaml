@@ -1,0 +1,10 @@
+portfolios:
+  main:
+    name: main portfolio
+    shares:
+    - dev-ou
+    products:
+      sample:
+        versions:
+        - name: v1.0.0
+          description: initial version

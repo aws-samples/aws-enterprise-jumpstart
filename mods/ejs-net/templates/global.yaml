@@ -1,0 +1,14 @@
+Description: EJS Global Network Components
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-network
+
+Resources:
+  DummyParamter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /network/${AWS::StackName}
+      Value: !Ref AWS::StackName
+      Type: String

@@ -1,0 +1,85 @@
+Description: EJS AWS SSO Components
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+  InstanceArn:
+    Type: String
+  IdentityStoreId:
+    Type: String
+
+Resources:
+  NewSSOGroupEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Trigger for when a new SSO Group is propagated from Azure AD via SCIM
+      EventPattern:
+        source:
+        - aws.sso-directory
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - sso-directory.amazonaws.com
+          eventName:
+          - CreateGroup
+      Targets:
+        - Arn: !GetAtt SsoAssignGroupsFunction.Arn
+          Id: sso-assign-group-function          
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: SSOandOrgPermissions
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - sso-directory:Describe*
+            - sso-directory:Get*
+            - sso-directory:List*
+            - sso-directory:Describe*
+            - sso-directory:Search*
+            - sso:Describe*
+            - sso:Get*
+            - sso:List*
+            - sso:DeleteAccountAssignment
+            - sso:CreateAccountAssignment
+            - sso:ProvisionPermissionSet
+            - identitystore:List*
+            - identitystore:Describe*
+            - organizations:ListAccountsForParent
+            - organizations:ListAccounts
+            - organizations:ListTagsForResource
+            - sns:Publish
+            Resource: '*'                          
+  SsoAssignGroupsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: '../functions'
+      Handler: 'assign_group_to_account.lambda_handler'
+      Role: !GetAtt ExecutionRole.Arn
+      Runtime: 'python3.9'
+      MemorySize: 128
+      Timeout: 900
+      Environment:
+        Variables: 
+          SNS_TOPIC: !Sub arn:aws:sns:${AWS::Region}:{{resolve:ssm:/org/deployment-account/id}}:aws-account-creation 
+  EventsFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt SsoAssignGroupsFunction.Arn
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt NewSSOGroupEventRule.Arn             

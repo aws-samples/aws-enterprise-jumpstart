@@ -1,0 +1,35 @@
+version: 0.2
+cache:
+  paths:
+  - ~/.cache/pip/**/*
+phases:
+  install:
+    runtime-versions:
+      python: 3.8
+    commands:
+      - pip install boto3 cfn-flip
+  pre_build:
+    commands:
+    - echo "Building with $(python --version)"
+  build:
+    commands:
+    - mkdir -p build
+    # home region
+    - aws cloudformation package --template-file templates/global.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-global.yaml
+    - aws cloudformation package --template-file templates/regional.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional.yaml
+    - aws cloudformation package --template-file templates/regional-automation.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-automation.yaml
+    - aws cloudformation package --template-file templates/regional-egress-vpc.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-egress-vpc.yaml
+    - aws cloudformation package --template-file templates/regional-inspection-vpc.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-inspection-vpc.yaml
+    - aws cloudformation package --template-file templates/regional-network-firewall.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-network-firewall.yaml
+    # us-east-1
+    # - aws cloudformation package --template-file templates/regional.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME_US_EAST_1}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-us-east-1.yaml
+    # - aws cloudformation package --template-file templates/regional-automation.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME_US_EAST_1}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-automation-us-east-1.yaml
+    # - aws cloudformation package --template-file templates/regional-egress-vpc.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME_US_EAST_1}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-egress-vpc-us-east-1.yaml
+    # - aws cloudformation package --template-file templates/regional-inspection-vpc.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME_US_EAST_1}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-inspection-vpc-us-east-1.yaml
+    # - aws cloudformation package --template-file templates/regional-network-firewall.yaml --s3-bucket "${ARTIFACTS_BUCKET_NAME_US_EAST_1}" --s3-prefix "${ARTIFACTS_BUCKET_CFN_ASSET_PREFIX}" --output-template-file build/packaged-regional-network-firewall-us-east-1.yaml
+  post_build:
+    commands:
+    - echo Build completed on $(date)
+artifacts:
+  files:
+  - build/*

@@ -1,0 +1,11 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ejs-security",
+    "HomeRegion": "eu-central-1",
+    "Path": "/",
+    "MemberIAMRoleName": "ejs-SecurityAutomationRole",
+    "MemberIAMRolePath": "/",
+    "Schedule": "rate(1 day)",
+    "EventTriggerState": "DISABLED"
+  }
+}

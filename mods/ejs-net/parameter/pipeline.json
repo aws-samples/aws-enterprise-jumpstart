@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ejs-network",
+    "RepositorySourceBranch": "main",
+    "AdditionalRegions": ""
+  }
+}

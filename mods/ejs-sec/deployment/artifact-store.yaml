@@ -1,0 +1,94 @@
+Description: Artifact Store deployed in non home regions
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-security
+  KmsKeyArn:
+    Type: String
+Resources:
+  KmsKeyReplica:
+    Type: AWS::KMS::ReplicaKey
+    Properties:
+      Description: Enterprise Jumpstart Artifacts Key
+      PrimaryKeyArn: !Ref KmsKeyArn
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: !Ref AWS::StackName
+        Statement:
+        - Sid: Allows admin of the key
+          Effect: Allow
+          Principal:
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - "kms:Create*"
+          - "kms:Describe*"
+          - "kms:Enable*"
+          - "kms:List*"
+          - "kms:Put*"
+          - "kms:Update*"
+          - "kms:Revoke*"
+          - "kms:Disable*"
+          - "kms:Get*"
+          - "kms:Delete*"
+          - "kms:ScheduleKeyDeletion"
+          - "kms:CancelKeyDeletion"
+          Resource: "*"
+        - Sid: Allow use of the key for Audit/Logs account
+          Effect: Allow
+          Principal:
+            AWS:
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:DescribeKey
+          Resource: "*"
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${ManagedResourcePrefix}-codepipeline
+      TargetKeyId: !Ref KmsKeyReplica
+  ArtifactBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ManagedResourcePrefix}-${AWS::AccountId}-${AWS::Region}-artifacts'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - BucketKeyEnabled: true
+          ServerSideEncryptionByDefault:
+            KMSMasterKeyID: !Ref KmsKeyReplica
+            SSEAlgorithm: 'aws:kms'
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Action:
+          - 's3:Get*'
+          - 's3:Put*'
+          - 's3:List*'
+          Effect: Allow
+          Resource:
+          - !Join
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref ArtifactBucket
+              - /*
+          - !Join
+            - ''
+            - - 'arn:aws:s3:::'
+              - !Ref ArtifactBucket
+          Principal:
+            AWS:
+            - !Sub arn:aws:iam::${AWS::AccountId}:root
+
+Outputs:
+  KmsKeyId:
+    Value: !Ref KmsKeyReplica

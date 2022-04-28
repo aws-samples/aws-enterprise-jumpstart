@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ejs-sspm",
+    "RepositorySourceBranch": "main",
+    "AdditionalRegions": ""
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "ManagedResourcePrefix": "ejs-sso",
+    "RepositorySourceBranch": "main",
+    "AdditionalRegions": ""
+  }
+}

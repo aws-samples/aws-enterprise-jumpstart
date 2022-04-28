@@ -1,0 +1,337 @@
+Description: Central Egress VPC holding on-premise connectivity, vpc endpoints and internet egress
+
+Parameters:
+  Identifier:
+    Type: String
+  PrivateSubnetCidr:
+    Type: String
+  PublicSubnetCidr:
+    Type: String
+  PrivateSubnetPrefixLength:
+    Type: String
+  PublicSubnetPrefixLength:
+    Type: String
+
+Mappings:
+  Cidr:
+    PrefixLength:
+      "16": 16
+      "17": 15
+      "18": 14
+      "19": 13
+      "20": 12
+      "21": 11
+      "22": 10
+      "23": 9
+      "24": 8
+      "25": 7
+      "26": 6
+      "27": 5
+      "28": 4
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref PrivateSubnetCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value: !Ref Identifier
+  PublicVpcCidr:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties: 
+      CidrBlock: !Ref PublicSubnetCidr
+      VpcId: !Ref Vpc
+  DnsVpcDhcpOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: !Sub 'egress.${AWS::Region}.{{resolve:ssm:/org/network/domain}}'
+      DomainNameServers:
+      - AmazonProvidedDNS
+      Tags:
+      - Key: Name
+        Value: !Ref Identifier
+  DnsVpcDhcpOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      DhcpOptionsId: !Ref DnsVpcDhcpOptions
+      VpcId: !Ref Vpc
+  TransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+      - !Ref PrivateSubnetA
+      - !Ref PrivateSubnetB
+      - !Ref PrivateSubnetC
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: egress
+      - Key: Name
+        Value: !Ref Identifier
+      - Key: Account
+        Value: !Ref AWS::AccountId
+  TgwRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/route-table/hub}}'
+  RouteDevToEgressVpc:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/route-table/hub}}'
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Sub ${Identifier}-private-a
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Sub ${Identifier}-private-b
+  PrivateRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Sub ${Identifier}-private-c
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [0, !Cidr [!Ref PrivateSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref PrivateSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Sub ${Identifier}-private-a
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      SubnetId: !Ref PrivateSubnetA
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [1, !Cidr [!Ref PrivateSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref PrivateSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Sub ${Identifier}-private-b
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      SubnetId: !Ref PrivateSubnetB
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Select [2, !Cidr [!Ref PrivateSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref PrivateSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Sub ${Identifier}-private-c
+  PrivateSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      SubnetId: !Ref PrivateSubnetC
+  RouteToTransitGatewayA:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  RouteToNatGatewayA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayA
+  RouteToTransitGatewayB:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  RouteToNatGatewayB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayB
+  RouteToTransitGatewayC:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  RouteToNatGatewayC:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableC
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayC
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value: !Sub ${Identifier}-public
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags: 
+      - Key: Name
+        Value: !Sub ${Identifier}-igw
+  IgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+  RoutePublicSubnetToTransitGateway:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  RouteToInternetGateway:
+    DependsOn: IgwAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetA:
+    DependsOn: PublicVpcCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [0, !Cidr [!Ref PublicSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref PublicSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value: !Sub ${Identifier}-public-a
+  NatGatewayElasticIpA:
+    Type: AWS::EC2::EIP
+    Properties: 
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Identifier}-a
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NatGatewayElasticIpA.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+      - Key: Name
+        Value: !Sub ${Identifier}-a
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+  PublicSubnetB:
+    DependsOn: PublicVpcCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [1, !Cidr [!Ref PublicSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref PublicSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value: !Sub ${Identifier}-public-b
+  NatGatewayElasticIpB:
+    Type: AWS::EC2::EIP
+    Properties: 
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Identifier}-b
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NatGatewayElasticIpB.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+      - Key: Name
+        Value: !Sub ${Identifier}-b
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetB
+  PublicSubnetC:
+    DependsOn: PublicVpcCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Select [2, !Cidr [!Ref PublicSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref PublicSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value: !Sub ${Identifier}-public-c
+  NatGatewayElasticIpC:
+    Type: AWS::EC2::EIP
+    Properties: 
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${Identifier}-c
+  NatGatewayC:
+    Type: AWS::EC2::NatGateway
+    Properties: 
+      AllocationId: !GetAtt NatGatewayElasticIpC.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref PublicSubnetC
+      Tags:
+      - Key: Name
+        Value: !Sub ${Identifier}-c
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetC
+
+Outputs:
+  Vpc:
+    Value: !Ref Vpc

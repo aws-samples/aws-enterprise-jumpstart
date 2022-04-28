@@ -1,0 +1,355 @@
+Description: Central Inspection VPC holding firewall components
+
+Parameters:
+  Identifier:
+    Type: String
+  TransitGatewaySubnetCidr:
+    Type: String
+  FirewallSubnetCidr:
+    Type: String
+  TransitGatewaySubnetPrefixLength:
+    Type: String
+  FirewallSubnetPrefixLength:
+    Type: String
+
+Mappings:
+  Cidr:
+    PrefixLength:
+      "16": 16
+      "17": 15
+      "18": 14
+      "19": 13
+      "20": 12
+      "21": 11
+      "22": 10
+      "23": 9
+      "24": 8
+      "25": 7
+      "26": 6
+      "27": 5
+      "28": 4
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref TransitGatewaySubnetCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value: !Ref Identifier
+  FirewallVpcCidr:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties: 
+      CidrBlock: !Ref FirewallSubnetCidr
+      VpcId: !Ref Vpc
+  DnsVpcDhcpOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: !Sub 'inspection.${AWS::Region}.{{resolve:ssm:/org/network/domain}}'
+      DomainNameServers:
+      - AmazonProvidedDNS
+      Tags:
+      - Key: Name
+        Value: !Ref Identifier
+  DnsVpcDhcpOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      DhcpOptionsId: !Ref DnsVpcDhcpOptions
+      VpcId: !Ref Vpc
+  TransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+      - !Ref TransitGatewaySubnetA
+      - !Ref TransitGatewaySubnetB
+      - !Ref TransitGatewaySubnetC
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value: !Ref Identifier
+      - Key: Account
+        Value: !Ref AWS::AccountId
+  TgwRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/route-table/hub}}'
+  RouteDevToInspectionVpc:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/route-table/dev}}'
+  RouteProdToInspectionVpc:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/route-table/prod}}'
+  TransitGatewayRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: tgw
+      - Key: Name
+        Value: !Sub ${Identifier}-tgw-a
+  TransitGatewayRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: tgw
+      - Key: Name
+        Value: !Sub ${Identifier}-tgw-b
+  TransitGatewayRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: tgw
+      - Key: Name
+        Value: !Sub ${Identifier}-tgw-c
+  # TODO: Add route to ntfw endpoints
+  TransitGatewaySubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [0, !Cidr [!Ref TransitGatewaySubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref TransitGatewaySubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: tgw
+      - Key: Name
+        Value: !Sub ${Identifier}-tgw-a
+  TransitGatewaySubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref TransitGatewayRouteTableA
+      SubnetId: !Ref TransitGatewaySubnetA
+  TransitGatewaySubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [1, !Cidr [!Ref TransitGatewaySubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref TransitGatewaySubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: tgw
+      - Key: Name
+        Value: !Sub ${Identifier}-tgw-b
+  TransitGatewaySubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref TransitGatewayRouteTableB
+      SubnetId: !Ref TransitGatewaySubnetB
+  TransitGatewaySubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Select [2, !Cidr [!Ref TransitGatewaySubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref TransitGatewaySubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: tgw
+      - Key: Name
+        Value: !Sub ${Identifier}-tgw-c
+  TransitGatewaySubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref TransitGatewayRouteTableC
+      SubnetId: !Ref TransitGatewaySubnetC
+  FirewallRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: firewall
+      - Key: Name
+        Value: !Sub ${Identifier}-firewall-a
+  FirewallRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: firewall
+      - Key: Name
+        Value: !Sub ${Identifier}-firewall-b
+  FirewallRouteTableC:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: firewall
+      - Key: Name
+        Value: !Sub ${Identifier}-firewall-c
+  RouteToTransitGatewayA:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  RouteToTransitGatewayB:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  RouteToTransitGatewayC:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableC
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayId: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  FirewallSubnetA:
+    DependsOn: FirewallVpcCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Select [0, !Cidr [!Ref FirewallSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref FirewallSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: firewall
+      - Key: Name
+        Value: !Sub ${Identifier}-firewall-a
+  FirewallSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableA
+      SubnetId: !Ref FirewallSubnetA
+  FirewallSubnetB:
+    DependsOn: FirewallVpcCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Select [1, !Cidr [!Ref FirewallSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref FirewallSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: firewall
+      - Key: Name
+        Value: !Sub ${Identifier}-firewall-b
+  FirewallSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableB
+      SubnetId: !Ref FirewallSubnetB
+  FirewallSubnetC:
+    DependsOn: FirewallVpcCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Select [2, !Cidr [!Ref FirewallSubnetCidr, 4, !FindInMap [Cidr, PrefixLength, !Ref FirewallSubnetPrefixLength]]]
+      VpcId: !Ref Vpc
+      Tags:
+      - Key: Type
+        Value: firewall
+      - Key: Name
+        Value: !Sub ${Identifier}-firewall-c
+  FirewallSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FirewallRouteTableC
+      SubnetId: !Ref FirewallSubnetC
+  InboundResolverEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group Route53 inbound resolver
+      GroupName: DNS Inbound
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        Description: DNS/udp ingress to interface endpoint from intranet subnet
+        FromPort: 53
+        IpProtocol: udp
+        ToPort: 53
+      - CidrIp: 0.0.0.0/0
+        Description: DNS/tcp ingress to interface endpoint from intranet subnet
+        FromPort: 53
+        IpProtocol: tcp
+        ToPort: 53
+      - CidrIp: 0.0.0.0/0
+        IpProtocol: icmp
+        FromPort: 8
+        ToPort: -1
+      Tags:
+      - Key: Name
+        Value: DNS Inbound
+      VpcId: !Ref Vpc
+  Route53InboundResolverEndpoints:
+    Type: AWS::Route53Resolver::ResolverEndpoint
+    Properties: 
+      Direction: INBOUND
+      IpAddresses: 
+      - SubnetId: !Ref TransitGatewaySubnetA
+      - SubnetId: !Ref TransitGatewaySubnetB
+      - SubnetId: !Ref TransitGatewaySubnetC
+      Name: !Sub ${Identifier}-inbound
+      SecurityGroupIds: 
+      - !Ref InboundResolverEndpointSecurityGroup
+  OutboundResolverEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group Route53 outbound resolver
+      GroupName: DNS Outbound
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        Description: DNS/udp egress
+        FromPort: 53
+        IpProtocol: udp
+        ToPort: 53
+      - CidrIp: 0.0.0.0/0
+        Description: DNS/tcp egress
+        FromPort: 53
+        IpProtocol: tcp
+        ToPort: 53
+      Tags:
+      - Key: Name
+        Value: DNS Outbound
+      VpcId: !Ref Vpc
+  Route53ResolverEndpointOutbound:
+    Type: AWS::Route53Resolver::ResolverEndpoint
+    Properties:
+      Direction: Outbound
+      IpAddresses: 
+      - SubnetId: !Ref TransitGatewaySubnetA
+      - SubnetId: !Ref TransitGatewaySubnetB
+      - SubnetId: !Ref TransitGatewaySubnetC
+      Name: !Sub ${Identifier}-outbound
+      SecurityGroupIds: 
+      - !Ref OutboundResolverEndpointSecurityGroup
+
+Outputs:
+  Vpc:
+    Value: !Ref Vpc
+  FirewallSubnetA:
+    Value: !Ref FirewallSubnetA
+  FirewallSubnetB:
+    Value: !Ref FirewallSubnetB
+  FirewallSubnetC:
+    Value: !Ref FirewallSubnetC
+  FirewallRouteTableA:
+    Value: !Ref FirewallRouteTableA
+  FirewallRouteTableB:
+    Value: !Ref FirewallRouteTableB
+  FirewallRouteTableC:
+    Value: !Ref FirewallRouteTableC
+  TransitGatewayRouteTableA:
+    Value: !Ref TransitGatewayRouteTableA
+  TransitGatewayRouteTableB:
+    Value: !Ref TransitGatewayRouteTableB
+  TransitGatewayRouteTableC:
+    Value: !Ref TransitGatewayRouteTableC

@@ -1,0 +1,91 @@
+Description: EJS Regional Network Automation Components
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+    Default: ejs-network
+Resources:
+  TgwRoutingAutomationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: tgw-routing-automation
+      Subscription:
+      - Endpoint: !GetAtt TgwRoutingAutomationFunction.Arn
+        Protocol: lambda
+  TopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+      - !Ref TgwRoutingAutomationTopic
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: "*"
+          Action: sns:Publish
+          Resource: !Ref TgwRoutingAutomationTopic
+          Condition:
+            ForAnyValue:StringEquals:
+              aws:PrincipalOrgID: '{{resolve:ssm:/org/id}}'
+            ArnLike:
+              aws:PrincipalArn:
+              - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+  TgwRoutingAutomationFunctionInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref TgwRoutingAutomationTopic
+      FunctionName: !GetAtt TgwRoutingAutomationFunction.Arn
+  TgwRoutingAutomationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: tgw-routing-automation
+      Description: Automated Creation Function for Spoke VPCs
+      Handler: tgw_routing_automation.handle_event
+      Role: !GetAtt TgwRoutingAutomationExecutionRole.Arn
+      Code: ../functions
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 120
+      Environment:
+        Variables:
+          TGW_ID: !Sub '{{resolve:ssm:/networking/${AWS::Region}/tgw-id}}'
+  TgwRoutingAutomationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: TransitGatewayRoutes
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:*
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - ssm:GetParameter*
+            Resource: "*"
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${TgwRoutingAutomationFunction}
+      RetentionInDays: 30
+
+Outputs:
+  TgwRoutingAutomationFunctionArn:
+    Value: !GetAtt TgwRoutingAutomationFunction.Arn
+  TgwRoutingAutomationTopicArn:
+    Value: !Ref TgwRoutingAutomationTopic

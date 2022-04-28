@@ -1,0 +1,95 @@
+Description: EJS Self Service Permissions Management Components
+
+Parameters:
+  ManagedResourcePrefix:
+    Type: String
+  InstanceArn:
+    Type: String
+  IdentityStoreId:
+    Type: String
+
+Resources:
+  InvocationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref ManagedResourcePrefix
+      Subscription:
+      - Endpoint: !GetAtt SnsStackFunction.Arn
+        Protocol: lambda
+  InvocationTopicParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /org/sns-based-stack-topic
+      Value: !Ref ManagedResourcePrefix
+      Type: String
+  TopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+      - !Ref InvocationTopic
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: "*"
+          Action: sns:Publish
+          Resource: !Ref InvocationTopic
+          Condition:
+            ForAnyValue:StringEquals:
+              aws:PrincipalOrgId:
+              - '{{resolve:ssm:/org/id}}'
+            ArnLike:
+              aws:PrincipalArn:
+              - 'arn:aws:iam::*:role/{{resolve:ssm:/org/prefix}}-sspm-sc-launch'
+  FunctionInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref InvocationTopic
+      FunctionName: !GetAtt SnsStackFunction.Arn
+  SnsStackFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: custom cfn resource to manage cloudformation stacks cross account
+      Handler: sns_based_cfn_stack.lambda_handler
+      Role: !GetAtt SnsStackFunctionExecutionRole.Arn
+      Code: ../functions
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 900
+  SnsStackFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - cloudformation:*
+            Resource:
+            - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ManagedResourcePrefix}*
+          # TODO: Add required permissions
+          - Effect: Allow
+            Action:
+            - lambda:Invoke*
+            Resource: "*"
+  SnsStackFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SnsStackFunction}
+      RetentionInDays: 30
+
