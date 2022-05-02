@@ -8,6 +8,7 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: tgw-routing-automation
+      KmsMasterKeyId: alias/aws/sns
       Subscription:
       - Endpoint: !GetAtt TgwRoutingAutomationFunction.Arn
         Protocol: lambda

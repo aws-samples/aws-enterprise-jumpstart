@@ -13,6 +13,7 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: !Ref ManagedResourcePrefix
+      KmsMasterKeyId: alias/aws/sns
       Subscription:
       - Endpoint: !GetAtt SnsStackFunction.Arn
         Protocol: lambda
