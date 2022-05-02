@@ -97,7 +97,13 @@ Resources:
   ServiceCatalogArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !FindInMap [Config, Service, ArtifactBucketName]            
+      BucketName: !FindInMap [Config, Service, ArtifactBucketName]
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
   ServiceCatalogArtifactsReadPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
