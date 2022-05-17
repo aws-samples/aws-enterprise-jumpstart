@@ -1,3 +1,5 @@
+**repository _moved_, maintained elsewhere -> https://github.com/curlim/aws-enterprise-jumpstart**
+
 # AWS Enterprise Jumpstart (EJS)
 
 Enterprise Jumpstart is a cloud foundation/landing-zone framework with transparency & simplicity in mind. It establishes governance and control for enterprise multi-account cloud environment by utilizing AWS Organization and AWS native APIs only. It automates the deployment of an enterprise cloud foundation including central logging & cross-account security audits, account blueprints, versioning & provisioning, security & compliance guardrails.
